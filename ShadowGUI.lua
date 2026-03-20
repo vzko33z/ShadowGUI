@@ -3143,38 +3143,41 @@ do
     local lbPersistConn = nil
     local lbParams      = {pos=1, val="", name=""}
 
-    -- Trouve TOUS les containers leaderboard actifs
-    local function getAllContainers()
-        local containers = {}
+    -- Formate un nombre avec virgules : 99999 -> 99,999
+    local function formatNum(n)
+        local s = tostring(math.floor(tonumber(n) or 0))
+        local result, count = "", 0
+        for i = #s, 1, -1 do
+            count = count + 1
+            result = s:sub(i,i) .. result
+            if count % 3 == 0 and i > 1 then result = "," .. result end
+        end
+        return result
+    end
+
+    -- Trouve le container du LeaderboardGui VISIBLE/OUVERT en ce moment
+    local function getActiveContainer()
         local pg = Player.PlayerGui
+        for _, child in ipairs(pg:GetChildren()) do
+            if child.Name == "LeaderboardGui" and child.Enabled then
+                local list = child:FindFirstChild("List")
+                if list and list.Visible then
+                    local cont = list:FindFirstChild("Container")
+                    if cont then return cont end
+                end
+            end
+        end
+        -- fallback : prend le premier trouve meme si pas visible
         for _, child in ipairs(pg:GetChildren()) do
             if child.Name == "LeaderboardGui" then
                 local list = child:FindFirstChild("List")
                 if list then
                     local cont = list:FindFirstChild("Container")
-                    if cont then
-                        table.insert(containers, cont)
-                    end
+                    if cont then return cont end
                 end
             end
         end
-        return containers
-    end
-
-    -- Detecte le type d'un TextLabel dans un slot
-    -- Retourne "rank", "score", "displayname", "username", "other"
-    local function detectType(text)
-        if not text or text == "" then return "other" end
-        local clean = text:gsub(",",""):gsub(" ",""):gsub("%.","")
-        -- Rang : #1 / 1. / #12 etc
-        if text:match("^#?%d+%.?$") then return "rank" end
-        -- Score : nombre pur (peut avoir virgules/espaces)
-        if tonumber(clean) ~= nil then return "score" end
-        -- Username : commence par @
-        if text:match("^@") then return "username" end
-        -- DisplayName : texte alphanum
-        if text:match("^[%w%s_%-%.]+$") and #text >= 2 then return "displayname" end
-        return "other"
+        return nil
     end
 
     local function applyLBToContainer(container)
@@ -3183,13 +3186,22 @@ do
         local myDisplay  = lbParams.name ~= "" and lbParams.name or Player.DisplayName
         local myUsername = "@" .. (lbParams.name ~= "" and lbParams.name or Player.Name)
 
-        -- Trie les slots par position Y
+        -- Trie les slots par position Y (seulement les vrais slots)
         local slots = {}
         for _, child in ipairs(container:GetChildren()) do
-            if child:IsA("Frame") and child.Visible then
+            if child:IsA("Frame") and child.Name == "LeaderboardPlayerSlot" then
                 table.insert(slots, child)
             end
         end
+        -- Si pas de nom LeaderboardPlayerSlot, prend tous les frames
+        if #slots == 0 then
+            for _, child in ipairs(container:GetChildren()) do
+                if child:IsA("Frame") and child.Visible then
+                    table.insert(slots, child)
+                end
+            end
+        end
+
         table.sort(slots, function(a, b)
             return a.AbsolutePosition.Y < b.AbsolutePosition.Y
         end)
@@ -3197,73 +3209,79 @@ do
         local slot = slots[targetPos]
         if not slot then return end
 
-        for _, desc in ipairs(slot:GetDescendants()) do
-            if desc:IsA("TextLabel") and desc.Text ~= "" then
-                local t = detectType(desc.Text)
-                if t == "rank" then
-                    desc.Text = "#" .. tostring(targetPos)
-                elseif t == "score" and targetVal ~= "" then
-                    -- Formate le score avec virgules si c'est un nombre
-                    local num = tonumber(targetVal)
-                    if num then
-                        -- Format avec virgules : 99999 -> 99,999
-                        local s = tostring(math.floor(num))
-                        local result = ""
-                        local count = 0
-                        for i = #s, 1, -1 do
-                            count = count + 1
-                            result = s:sub(i,i) .. result
-                            if count % 3 == 0 and i > 1 then
-                                result = "," .. result
-                            end
-                        end
-                        desc.Text = result
-                    else
-                        desc.Text = targetVal
+        -- Cote GAUCHE
+        local leftFrame = slot:FindFirstChild("Left")
+        if leftFrame then
+            -- Headshot : remplace par l'avatar du joueur local
+            local headshot = leftFrame:FindFirstChild("Headshot")
+            if headshot and headshot:IsA("ImageLabel") then
+                pcall(function()
+                    local thumb = Players:GetUserThumbnailAsync(
+                        Player.UserId,
+                        Enum.ThumbnailType.HeadShot,
+                        Enum.ThumbnailSize.Size100x100
+                    )
+                    headshot.Image = thumb
+                end)
+            end
+
+            -- DisplayName
+            local dn = leftFrame:FindFirstChild("DisplayName")
+            if dn and dn:IsA("TextLabel") then
+                dn.Text = myDisplay
+            end
+
+            -- Username
+            local un = leftFrame:FindFirstChild("Username")
+            if un and un:IsA("TextLabel") then
+                un.Text = myUsername
+            end
+
+            -- Rank (TextLabel "Rank" dans Left)
+            local rank = leftFrame:FindFirstChild("Rank")
+            if rank and rank:IsA("TextLabel") then
+                rank.Text = "#" .. tostring(targetPos)
+            end
+        end
+
+        -- Cote DROIT
+        local rightFrame = slot:FindFirstChild("Right")
+        if rightFrame then
+            -- Value principale
+            local val = rightFrame:FindFirstChild("Value")
+            if val and val:IsA("TextLabel") and targetVal ~= "" then
+                val.Text = formatNum(targetVal)
+            end
+
+            -- RankIconLabel > Title (le score dans le badge)
+            local rankFrame = rightFrame:FindFirstChild("Rank")
+            if rankFrame then
+                local rankIconLabel = rankFrame:FindFirstChild("RankIconLabel")
+                if rankIconLabel then
+                    local title = rankIconLabel:FindFirstChild("Title")
+                    if title and title:IsA("TextLabel") and targetVal ~= "" then
+                        title.Text = formatNum(targetVal)
                     end
-                elseif t == "displayname" then
-                    desc.Text = myDisplay
-                elseif t == "username" then
-                    desc.Text = myUsername
                 end
             end
         end
     end
 
     local function applyLB()
-        local containers = getAllContainers()
-        for _, cont in ipairs(containers) do
-            pcall(applyLBToContainer, cont)
-        end
+        local container = getActiveContainer()
+        if not container then return end
+        pcall(applyLBToContainer, container)
     end
 
     local function refreshRealLeaderboard()
-        -- Fire le remote RequestLeaderboards pour recharger le vrai LB
         pcall(function()
-            local remote = game:GetService("ReplicatedStorage")
-                :FindFirstChild("Remotes")
-                and game:GetService("ReplicatedStorage").Remotes
-                :FindFirstChild("Misc")
-                and game:GetService("ReplicatedStorage").Remotes.Misc
-                :FindFirstChild("RequestLeaderboards")
-            if remote then
-                remote:FireServer()
-            end
-        end)
-        -- Aussi essaie LeaderboardRefreshed
-        pcall(function()
-            local remote = game:GetService("ReplicatedStorage").Remotes.Misc.LeaderboardRefreshed
-            if remote then
-                remote:FireServer()
-            end
+            local remote = game:GetService("ReplicatedStorage").Remotes.Misc.RequestLeaderboards
+            if remote then remote:FireServer() end
         end)
     end
 
     local function startPersist()
-        if lbPersistConn then
-            lbPersistConn:Disconnect()
-            lbPersistConn = nil
-        end
+        if lbPersistConn then lbPersistConn:Disconnect() lbPersistConn = nil end
         lbPersistConn = RunService.Heartbeat:Connect(function()
             if not lbActive then
                 lbPersistConn:Disconnect()
@@ -3276,11 +3294,7 @@ do
 
     local function stopPersist()
         lbActive = false
-        if lbPersistConn then
-            lbPersistConn:Disconnect()
-            lbPersistConn = nil
-        end
-        -- Refresh le vrai leaderboard
+        if lbPersistConn then lbPersistConn:Disconnect() lbPersistConn = nil end
         refreshRealLeaderboard()
     end
 
@@ -3289,40 +3303,24 @@ do
             local pos = tonumber(inputPos.Text)
             if not pos then
                 if getgenv().ShadowNotif then
-                    getgenv().ShadowNotif(
-                        "Leaderboard",
-                        "Indique une position entre 1 et 100",
-                        Color3.fromRGB(239,68,68)
-                    )
+                    getgenv().ShadowNotif("Leaderboard", "Indique une position entre 1 et 100", Color3.fromRGB(239,68,68))
                 end
                 return
             end
-
             lbParams.pos  = math.clamp(math.floor(pos), 1, 100)
             lbParams.val  = inputVal.Text
             lbParams.name = inputName.Text
-
             lbActive = true
             startPersist()
-
-            local displayName = lbParams.name ~= "" and lbParams.name or Player.DisplayName
-
+            local dn = lbParams.name ~= "" and lbParams.name or Player.DisplayName
             if getgenv().ShadowNotif then
-                getgenv().ShadowNotif(
-                    "Leaderboard",
-                    "#" .. tostring(lbParams.pos) .. " " .. displayName .. " — " .. lbParams.val,
-                    C.primary
-                )
+                getgenv().ShadowNotif("Leaderboard", "#"..lbParams.pos.." "..dn.." — "..lbParams.val, C.primary)
             end
         end,
         function()
             stopPersist()
             if getgenv().ShadowNotif then
-                getgenv().ShadowNotif(
-                    "Leaderboard",
-                    "Reinitialise",
-                    Color3.fromRGB(130,125,155)
-                )
+                getgenv().ShadowNotif("Leaderboard", "Reinitialise", Color3.fromRGB(130,125,155))
             end
         end
     )
