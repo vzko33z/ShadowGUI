@@ -3391,78 +3391,168 @@ end
 wSec("STATS DE L'ARME ACTUELLE")
 do
     do
-        local ic=Instance.new("Frame",WeaponsSpoofPage)
-        ic.Size=UDim2.new(1,0,0,34); ic.BackgroundColor3=Color3.fromRGB(20,20,28)
-        ic.BorderSizePixel=0; ic.LayoutOrder=WP()
-        Instance.new("UICorner",ic).CornerRadius=UDim.new(0,7)
-        Instance.new("UIStroke",ic).Color=C.border
-        local il=Instance.new("TextLabel",ic)
-        il.Size=UDim2.new(1,-16,1,0); il.Position=UDim2.fromOffset(8,0)
-        il.BackgroundTransparency=1; il.FontFace=SILK; il.TextSize=9
-        il.TextColor3=Color3.fromRGB(167,139,250); il.TextXAlignment=Enum.TextXAlignment.Left
-        il.Text="ℹ  Ouvrez l'interface d'une arme dans Rivals avant Apply"
+        local ic = Instance.new("Frame", WeaponsSpoofPage)
+        ic.Size = UDim2.new(1,0,0,34)
+        ic.BackgroundColor3 = Color3.fromRGB(20,20,28)
+        ic.BorderSizePixel = 0; ic.LayoutOrder = WP()
+        Instance.new("UICorner", ic).CornerRadius = UDim.new(0,7)
+        Instance.new("UIStroke", ic).Color = C.border
+        local il = Instance.new("TextLabel", ic)
+        il.Size = UDim2.new(1,-16,1,0); il.Position = UDim2.fromOffset(8,0)
+        il.BackgroundTransparency = 1; il.FontFace = SILK; il.TextSize = 9
+        il.TextColor3 = Color3.fromRGB(167,139,250)
+        il.TextXAlignment = Enum.TextXAlignment.Left
+        il.Text = "Ouvrez l'interface d'une arme dans Rivals avant Apply"
     end
-    local _, inPT  = wInput("Playtime",                 "Ex: 120.5")
-    local _, inW   = wInput("Wins",                     "Ex: 99999")
-    local _, inL   = wInput("Losses",                   "Ex: 0")
-    local _, inWP  = wInput("Win%",                     "Ex: 99.9")
-    local _, inDMG = wInput("Damage",                   "Ex: 9999999")
-    local _, inEL  = wInput("Eliminations",             "Ex: 99999")
-    local _, inD   = wInput("Deaths",                   "Ex: 0")
-    local _, inAS  = wInput("Assists",                  "Ex: 9999")
-    local _, inH   = wInput("Hits",                     "Ex: 99999")
-    local _, inHP  = wInput("Hit%",                     "Ex: 99.9")
-    local _, inXP  = wInput("XP",                      "Ex: 999999")
-    local _, inWL  = wInput("Level  (MAX = max level)", "Ex: 50 ou MAX")
-    local origWS = {}
-    wRow(
-        function()
-            local KW={
-                {inp=inPT,  keys={"playtime","time played"}},
-                {inp=inW,   keys={"wins"}},
-                {inp=inL,   keys={"losses","loss"}},
-                {inp=inWP,  keys={"win%","win rate","winrate"}},
-                {inp=inDMG, keys={"damage","dmg"}},
-                {inp=inEL,  keys={"elimination","elim","kill"}},
-                {inp=inD,   keys={"death"}},
-                {inp=inAS,  keys={"assist"}},
-                {inp=inH,   keys={"hits"}},
-                {inp=inHP,  keys={"hit%","hit rate","accuracy"}},
-                {inp=inXP,  keys={"xp","experience"}},
-                {inp=inWL,  keys={"level","lvl"}},
-            }
-            pcall(function()
-                for _,d in ipairs(Player.PlayerGui:GetDescendants()) do
-                    if d:IsA("TextLabel") and d.Text~="" then
-                        for _,kw in ipairs(KW) do
-                            if kw.inp.Text~="" then
-                                local t=d.Text:lower()
-                                for _,k in ipairs(kw.keys) do
-                                    if t:find(k) then
-                                        table.insert(origWS,{obj=d,text=d.Text})
-                                        d.Text=kw.inp.Text; break
-                                    end
+
+    local _, inPT  = wInput("Playtime",                  "Ex: 120.5")
+    local _, inW   = wInput("Wins",                      "Ex: 99999")
+    local _, inL   = wInput("Losses",                    "Ex: 0")
+    local _, inWP  = wInput("Win%",                      "Ex: 99.9")
+    local _, inDMG = wInput("Damage",                    "Ex: 9999999")
+    local _, inEL  = wInput("Eliminations",              "Ex: 99999")
+    local _, inD   = wInput("Deaths",                    "Ex: 0")
+    local _, inAS  = wInput("Assists",                   "Ex: 9999")
+    local _, inH   = wInput("Hits",                      "Ex: 99999")
+    local _, inHP  = wInput("Hit%",                      "Ex: 99.9")
+    local _, inXP  = wInput("XP",                        "Ex: 999999")
+    local _, inWL  = wInput("Level (MAX = max level)",   "Ex: 50 ou MAX")
+
+    local wsActive = false
+    local wsConn   = nil
+    local origWS   = {}
+
+    -- Map : mots cles du Title -> TextBox input
+    local function getKW()
+        return {
+            {inp=inPT,  keys={"playtime","temps de jeu","play time","time played"}},
+            {inp=inW,   keys={"^wins$","^victoires$"}},
+            {inp=inL,   keys={"^losses$","^pertes$"}},
+            {inp=inWP,  keys={"win%","win rate","winrate","victoire %","victoire%%"}},
+            {inp=inDMG, keys={"^damage$","^dégâts$","^degats$","^dmg$"}},
+            {inp=inEL,  keys={"elimination","elim","kills"}},
+            {inp=inD,   keys={"^deaths$","^morts$"}},
+            {inp=inAS,  keys={"assist"}},
+            {inp=inH,   keys={"^hits$","^frappes$"}},
+            {inp=inHP,  keys={"hit%","hit rate","accuracy","touché %","touche %"}},
+            {inp=inXP,  keys={"^xp$","experience","^xp$"}},
+            {inp=inWL,  keys={"^level$","^lvl$","^niveau$"}},
+        }
+    end
+
+    local function getEquipContainer()
+        local mg = Player.PlayerGui:FindFirstChild("MainGui")
+        if not mg then return nil end
+        local mf = mg:FindFirstChild("MainFrame")
+        if not mf then return nil end
+        local eq = mf:FindFirstChild("Equipment")
+        if not eq then return nil end
+        local right = eq:FindFirstChild("Right")
+        if not right then return nil end
+        local list = right:FindFirstChild("List")
+        if not list then return nil end
+        return list:FindFirstChild("Container")
+    end
+
+    local function applyWS()
+        local container = getEquipContainer()
+        if not container then return end
+        local kw = getKW()
+
+        -- Cible UNIQUEMENT les EquipmentMetricSlot
+        for _, slot in ipairs(container:GetDescendants()) do
+            if slot:IsA("Frame") and slot.Name == "EquipmentMetricSlot" then
+                local valueLabel    = slot:FindFirstChild("Value")
+                local titleCont     = slot:FindFirstChild("TitleContainer")
+                local titleLabel    = titleCont and titleCont:FindFirstChild("Title")
+
+                if valueLabel and titleLabel then
+                    local titleLow = titleLabel.Text:lower()
+                    for _, entry in ipairs(kw) do
+                        if entry.inp.Text ~= "" then
+                            for _, k in ipairs(entry.keys) do
+                                if titleLow:match(k) then
+                                    pcall(function()
+                                        valueLabel.Text = entry.inp.Text
+                                    end)
+                                    break
                                 end
                             end
                         end
                     end
                 end
-            end)
-            pcall(function()
-                local rem=game:GetService("ReplicatedStorage"):FindFirstChild("Remotes",true)
-                if rem then
-                    local r=rem:FindFirstChild("SetWeaponStats",true) or rem:FindFirstChild("UpdateWeapon",true)
-                    if r then r:FireServer({Playtime=tonumber(inPT.Text),Wins=tonumber(inW.Text),Losses=tonumber(inL.Text),WinPct=tonumber(inWP.Text),Damage=tonumber(inDMG.Text),Eliminations=tonumber(inEL.Text),Deaths=tonumber(inD.Text),Assists=tonumber(inAS.Text),Hits=tonumber(inH.Text),HitPct=tonumber(inHP.Text),XP=tonumber(inXP.Text),Level=inWL.Text=="MAX" and 999 or tonumber(inWL.Text)}) end
+            end
+        end
+
+        -- Level : Frame "Level" dans le container
+        if inWL.Text ~= "" then
+            local levelFrame = container:FindFirstChild("Level", true)
+            if levelFrame then
+                -- Numero de niveau
+                for _, desc in ipairs(levelFrame:GetDescendants()) do
+                    if desc:IsA("TextLabel") then
+                        local clean = desc.Text:gsub("%s",""):gsub(",","")
+                        if clean:match("^%d+$") then
+                            pcall(function()
+                                desc.Text = inWL.Text:upper() == "MAX" and "MAX" or inWL.Text
+                            end)
+                        end
+                    end
                 end
-            end)
-            if getgenv().ShadowNotif then getgenv().ShadowNotif("Weapon Stats","Appliqué ✓",C.primary) end
+                -- Barre XP si MAX
+                if inWL.Text:upper() == "MAX" then
+                    for _, desc in ipairs(levelFrame:GetDescendants()) do
+                        if desc:IsA("Frame") then
+                            local n = desc.Name:lower()
+                            if n:find("bar") or n:find("fill") or n:find("progress") or n:find("xp") then
+                                pcall(function()
+                                    desc.Size = UDim2.new(1, 0, desc.Size.Y.Scale, desc.Size.Y.Offset)
+                                end)
+                            end
+                        end
+                        -- Cache le bouton upgrade/keys
+                        if desc:IsA("TextButton") or desc:IsA("ImageButton") then
+                            local n = desc.Name:lower()
+                            if n:find("key") or n:find("upgrade") or n:find("lock") or n:find("buy") or n:find("level") then
+                                pcall(function() desc.Visible = false end)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    local function startPersist()
+        if wsConn then wsConn:Disconnect() wsConn = nil end
+        wsConn = RunService.Heartbeat:Connect(function()
+            if not wsActive then
+                wsConn:Disconnect()
+                wsConn = nil
+                return
+            end
+            pcall(applyWS)
+        end)
+    end
+
+    local function stopPersist()
+        wsActive = false
+        if wsConn then wsConn:Disconnect() wsConn = nil end
+    end
+
+    wRow(
+        function()
+            wsActive = true
+            startPersist()
+            if getgenv().ShadowNotif then
+                getgenv().ShadowNotif("Weapon Stats", "Applique!", C.primary)
+            end
         end,
         function()
-            pcall(function()
-                for _,e in ipairs(origWS) do pcall(function() e.obj.Text=e.text end) end
-                origWS={}
-            end)
-            if getgenv().ShadowNotif then getgenv().ShadowNotif("Weapon Stats","Réinitialisé",Color3.fromRGB(130,125,155)) end
+            stopPersist()
+            if getgenv().ShadowNotif then
+                getgenv().ShadowNotif("Weapon Stats", "Reinitialise", Color3.fromRGB(130,125,155))
+            end
         end
     )
 end
