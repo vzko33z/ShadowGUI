@@ -2928,22 +2928,120 @@ pSec("SKIN")
 do
     local _, inputSkin = pInput("Username (@)", "Ex: Builderman")
 
-    -- Info
-    do
-        local ic = Instance.new("Frame", ProfilePage)
-        ic.Size = UDim2.new(1,0,0,34); ic.BackgroundColor3 = Color3.fromRGB(20,20,28)
-        ic.BorderSizePixel = 0; ic.LayoutOrder = PP()
-        Instance.new("UICorner", ic).CornerRadius = UDim.new(0,7)
-        Instance.new("UIStroke", ic).Color = C.border
-        local il = Instance.new("TextLabel", ic)
-        il.Size = UDim2.new(1,-16,1,0); il.Position = UDim2.fromOffset(8,0)
-        il.BackgroundTransparency = 1; il.FontFace = SILK; il.TextSize = 9
-        il.TextColor3 = Color3.fromRGB(167,139,250)
-        il.TextXAlignment = Enum.TextXAlignment.Left
-        il.Text = "ℹ  Prend le skin du joueur entré (client-side uniquement)"
+    local origData = {}
+    local skinActive = false
+
+    local function getChar()
+        return workspace:FindFirstChild(Player.Name) or Player.Character
     end
 
-    local origDesc = nil
+    local function saveParts(char)
+        origData = {}
+        local bc = char:FindFirstChildOfClass("BodyColors")
+        if bc then
+            origData.bodyColors = {
+                HeadColor3     = bc.HeadColor3,
+                TorsoColor3    = bc.TorsoColor3,
+                LeftArmColor3  = bc.LeftArmColor3,
+                RightArmColor3 = bc.RightArmColor3,
+                LeftLegColor3  = bc.LeftLegColor3,
+                RightLegColor3 = bc.RightLegColor3,
+            }
+        end
+        origData.meshParts = {}
+        for _, part in ipairs(char:GetDescendants()) do
+            if part:IsA("MeshPart") then
+                origData.meshParts[part] = {
+                    TextureID = part.TextureID,
+                    Color     = part.Color,
+                }
+            end
+            if part:IsA("SpecialMesh") then
+                origData.meshParts[part] = {
+                    TextureId = part.TextureId,
+                    MeshId    = part.MeshId,
+                }
+            end
+        end
+    end
+
+    local function applyDescLocally(char, desc)
+        -- BodyColors
+        local bc = char:FindFirstChildOfClass("BodyColors")
+        if bc then
+            bc.HeadColor3     = desc.HeadColor
+            bc.TorsoColor3    = desc.TorsoColor
+            bc.LeftArmColor3  = desc.LeftArmColor
+            bc.RightArmColor3 = desc.RightArmColor
+            bc.LeftLegColor3  = desc.LeftLegColor
+            bc.RightLegColor3 = desc.RightLegColor
+        end
+
+        -- Texture des MeshParts (body)
+        local partMap = {
+            Head         = desc.Head,
+            LeftFoot     = desc.LeftFoot,
+            RightFoot    = desc.RightFoot,
+            LeftHand     = desc.LeftHand,
+            RightHand    = desc.RightHand,
+            LeftLowerArm = desc.LeftLowerArm,
+            RightLowerArm= desc.RightLowerArm,
+            LeftUpperArm = desc.LeftUpperArm,
+            RightUpperArm= desc.RightUpperArm,
+            LeftLowerLeg = desc.LeftLowerLeg,
+            RightLowerLeg= desc.RightLowerLeg,
+            LeftUpperLeg = desc.LeftUpperLeg,
+            RightUpperLeg= desc.RightUpperLeg,
+            UpperTorso   = desc.UpperTorso,
+            LowerTorso   = desc.LowerTorso,
+        }
+
+        for partName, assetId in pairs(partMap) do
+            local part = char:FindFirstChild(partName)
+            if part and part:IsA("MeshPart") and assetId and assetId ~= 0 then
+                pcall(function()
+                    part.TextureID = "rbxassetid://" .. assetId
+                end)
+            end
+        end
+
+        -- Face (SpecialMesh dans Head)
+        local head = char:FindFirstChild("Head")
+        if head then
+            local mesh = head:FindFirstChildOfClass("SpecialMesh")
+            if mesh and desc.Face and desc.Face ~= 0 then
+                pcall(function()
+                    mesh.TextureId = "rbxassetid://" .. desc.Face
+                end)
+            end
+        end
+    end
+
+    local function restoreLocally(char)
+        local bc = char:FindFirstChildOfClass("BodyColors")
+        if bc and origData.bodyColors then
+            for k, v in pairs(origData.bodyColors) do
+                bc[k] = v
+            end
+        end
+        if origData.meshParts then
+            for part, data in pairs(origData.meshParts) do
+                if part and part.Parent then
+                    pcall(function()
+                        if data.TextureID ~= nil then
+                            part.TextureID = data.TextureID
+                        end
+                        if data.TextureId ~= nil then
+                            part.TextureId = data.TextureId
+                        end
+                        if data.Color then
+                            part.Color = data.Color
+                        end
+                    end)
+                end
+            end
+        end
+    end
 
     pRow(ProfilePage,
         function()
@@ -2953,96 +3051,33 @@ do
                 end
                 return
             end
-
             task.spawn(function()
                 local ok, result = pcall(function()
-                    local username = inputSkin.Text:gsub("@", ""):gsub("%s", "")
-                    local uid = Players:GetUserIdFromNameAsync(username)
+                    local username = inputSkin.Text:gsub("@",""):gsub("%s","")
+                    local uid  = Players:GetUserIdFromNameAsync(username)
                     local desc = Players:GetHumanoidDescriptionFromUserId(uid)
-
-                    local char = Player.Character
-                    if not char then return end
-
-                    local hum = char:FindFirstChildOfClass("Humanoid")
-                    if not hum then return end
-
-                    -- Sauvegarde le skin original
-                    if not origDesc then
-                        origDesc = Players:GetHumanoidDescriptionFromUserId(Player.UserId)
-                    end
-
-                    -- Méthode 1 : ApplyDescription direct
-                    local ok1, err1 = pcall(function()
-                        hum:ApplyDescription(desc)
-                    end)
-
-                    if not ok1 then
-                        -- Méthode 2 : modifier les propriétés du HumanoidDescription une par une
-                        local curDesc = hum:GetAppliedDescription()
-                        -- Copie les IDs de texture du skin cible
-                        local props = {
-                            "Face", "Head", "Torso", "LeftArm", "RightArm",
-                            "LeftLeg", "RightLeg", "GraphicTShirt",
-                            "HatAccessory", "HairAccessory", "FaceAccessory",
-                            "NeckAccessory", "ShouldersAccessory",
-                            "FrontAccessory", "BackAccessory", "WaistAccessory",
-                            "ClimbAnimation", "FallAnimation", "IdleAnimation",
-                            "JumpAnimation", "RunAnimation", "SwimAnimation",
-                            "WalkAnimation", "PoseAnimation",
-                            "HeadColor", "LeftArmColor", "LeftLegColor",
-                            "RightArmColor", "RightLegColor", "TorsoColor",
-                            "BodyTypeScale", "DepthScale", "HeadScale",
-                            "HeightScale", "ProportionScale", "WidthScale",
-                        }
-                        for _, prop in ipairs(props) do
-                            pcall(function()
-                                curDesc[prop] = desc[prop]
-                            end)
-                        end
-                        pcall(function() hum:ApplyDescription(curDesc) end)
-                    end
-
-                    -- Méthode 3 : modifier les BaseParts directement (wraps/textures)
-                    pcall(function()
-                        -- Change la couleur du corps via BrickColor
-                        local bodyColors = char:FindFirstChildOfClass("BodyColors")
-                        if bodyColors then
-                            bodyColors.HeadColor3    = desc.HeadColor
-                            bodyColors.TorsoColor3   = desc.TorsoColor
-                            bodyColors.LeftArmColor3  = desc.LeftArmColor
-                            bodyColors.RightArmColor3 = desc.RightArmColor
-                            bodyColors.LeftLegColor3  = desc.LeftLegColor
-                            bodyColors.RightLegColor3 = desc.RightLegColor
-                        end
-                    end)
+                    local char = getChar()
+                    if not char then error("Personnage introuvable") end
+                    saveParts(char)
+                    applyDescLocally(char, desc)
+                    skinActive = true
                 end)
-
-                if ok then
-                    if getgenv().ShadowNotif then
-                        getgenv().ShadowNotif("Skin", "Skin appliqué ✓", C.primary)
-                    end
-                else
-                    if getgenv().ShadowNotif then
-                        getgenv().ShadowNotif("Skin", "Erreur : "..tostring(result):sub(1,40), Color3.fromRGB(239,68,68))
-                    end
+                if not ok and getgenv().ShadowNotif then
+                    getgenv().ShadowNotif("Skin", "Erreur: " .. tostring(result), Color3.fromRGB(239,68,68))
+                elseif ok and getgenv().ShadowNotif then
+                    getgenv().ShadowNotif("Skin Spoof", "Applique!", C.primary)
                 end
             end)
         end,
         function()
             task.spawn(function()
-                pcall(function()
-                    if not origDesc then
-                        origDesc = Players:GetHumanoidDescriptionFromUserId(Player.UserId)
+                local char = getChar()
+                if char and skinActive then
+                    restoreLocally(char)
+                    skinActive = false
+                    if getgenv().ShadowNotif then
+                        getgenv().ShadowNotif("Skin", "Restore!", Color3.fromRGB(130,125,155))
                     end
-                    local char = Player.Character
-                    if not char then return end
-                    local hum = char:FindFirstChildOfClass("Humanoid")
-                    if hum and origDesc then
-                        hum:ApplyDescription(origDesc)
-                    end
-                end)
-                if getgenv().ShadowNotif then
-                    getgenv().ShadowNotif("Skin", "Réinitialisé", Color3.fromRGB(130,125,155))
                 end
             end)
         end
