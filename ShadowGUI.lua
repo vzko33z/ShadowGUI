@@ -2622,61 +2622,190 @@ end
 -- BADGES
 pSec("BADGES")
 do
-    local BADGES={
-        {name="Premium Badge",  icon="rbxassetid://4038140816"},
-        {name="Verified Badge", icon="rbxassetid://4038145139"},
+    local BADGES = {
+        {name = "Premium Badge",  icon = "rbxassetid://4038140816"},
+        {name = "Verified Badge", icon = "rbxassetid://11478378840"}, -- icône correcte
     }
+
+    -- Trouve le BillboardGui nametag du personnage local
+    local function findNametagGui()
+        local char = Player.Character
+        if not char then return nil end
+        -- Rivals place le nametag dans la Head ou HumanoidRootPart
+        for _, part in ipairs({"Head", "HumanoidRootPart"}) do
+            local p = char:FindFirstChild(part)
+            if p then
+                for _, child in ipairs(p:GetChildren()) do
+                    if child:IsA("BillboardGui") then
+                        return child
+                    end
+                end
+            end
+        end
+        -- Fallback : cherche dans tout le personnage
+        for _, desc in ipairs(char:GetDescendants()) do
+            if desc:IsA("BillboardGui") and desc.Name ~= "ShadowBadgeGui" then
+                return desc
+            end
+        end
+        return nil
+    end
+
+    -- Trouve le TextLabel pseudo dans un BillboardGui
+    local function findNameLabel(bg)
+        if not bg then return nil end
+        for _, desc in ipairs(bg:GetDescendants()) do
+            if desc:IsA("TextLabel") and desc.Text ~= "" then
+                return desc
+            end
+        end
+        return nil
+    end
+
     local function buildBadge(badge)
-        local card=Instance.new("Frame",ProfilePage)
-        card.Size=UDim2.new(1,0,0,38); card.BackgroundColor3=C.card
-        card.BorderSizePixel=0; card.LayoutOrder=PP()
-        Instance.new("UICorner",card).CornerRadius=UDim.new(0,7)
-        Instance.new("UIStroke",card).Color=C.border
-        local ico=Instance.new("ImageLabel",card)
-        ico.Size=UDim2.fromOffset(18,18); ico.Position=UDim2.new(0,10,0.5,-9)
-        ico.BackgroundTransparency=1; ico.Image=badge.icon
-        ico.ImageColor3=C.primary; ico.ScaleType=Enum.ScaleType.Fit
-        local lbl=Instance.new("TextLabel",card)
-        lbl.Size=UDim2.new(1,-100,1,0); lbl.Position=UDim2.fromOffset(34,0)
-        lbl.BackgroundTransparency=1; lbl.FontFace=SILK; lbl.TextSize=10
-        lbl.TextColor3=C.text; lbl.TextXAlignment=Enum.TextXAlignment.Left; lbl.Text=badge.name
-        local st={on=false}
-        local track=Instance.new("TextButton",card)
-        track.Size=UDim2.fromOffset(42,22); track.Position=UDim2.new(1,-54,0.5,-11)
-        track.BackgroundColor3=C.surface; track.BorderSizePixel=0; track.Text=""; track.AutoButtonColor=false
-        Instance.new("UICorner",track).CornerRadius=UDim.new(1,0)
-        Instance.new("UIStroke",track).Color=C.border
-        local thumb=Instance.new("Frame",track)
-        thumb.Size=UDim2.fromOffset(16,16); thumb.Position=UDim2.fromOffset(3,3)
-        thumb.BackgroundColor3=Color3.new(1,1,1); thumb.BorderSizePixel=0
-        Instance.new("UICorner",thumb).CornerRadius=UDim.new(1,0)
+        local card = Instance.new("Frame", ProfilePage)
+        card.Size = UDim2.new(1,0,0,38); card.BackgroundColor3 = C.card
+        card.BorderSizePixel = 0; card.LayoutOrder = PP()
+        Instance.new("UICorner", card).CornerRadius = UDim.new(0,7)
+        Instance.new("UIStroke", card).Color = C.border
+
+        local ico = Instance.new("ImageLabel", card)
+        ico.Size = UDim2.fromOffset(18,18); ico.Position = UDim2.new(0,10,0.5,-9)
+        ico.BackgroundTransparency = 1; ico.Image = badge.icon
+        ico.ImageColor3 = C.primary; ico.ScaleType = Enum.ScaleType.Fit
+
+        local lbl = Instance.new("TextLabel", card)
+        lbl.Size = UDim2.new(1,-100,1,0); lbl.Position = UDim2.fromOffset(34,0)
+        lbl.BackgroundTransparency = 1; lbl.FontFace = SILK; lbl.TextSize = 10
+        lbl.TextColor3 = C.text; lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Text = badge.name
+
+        local st = {on = false}
+        local track = Instance.new("TextButton", card)
+        track.Size = UDim2.fromOffset(42,22); track.Position = UDim2.new(1,-54,0.5,-11)
+        track.BackgroundColor3 = C.surface; track.BorderSizePixel = 0
+        track.Text = ""; track.AutoButtonColor = false
+        Instance.new("UICorner", track).CornerRadius = UDim.new(1,0)
+        Instance.new("UIStroke", track).Color = C.border
+
+        local thumb = Instance.new("Frame", track)
+        thumb.Size = UDim2.fromOffset(16,16); thumb.Position = UDim2.fromOffset(3,3)
+        thumb.BackgroundColor3 = Color3.new(1,1,1); thumb.BorderSizePixel = 0
+        Instance.new("UICorner", thumb).CornerRadius = UDim.new(1,0)
+
         track.MouseButton1Click:Connect(function()
-            st.on=not st.on
-            TweenService:Create(track,TweenInfo.new(0.12),{BackgroundColor3=st.on and C.primary or C.surface}):Play()
-            TweenService:Create(thumb,TweenInfo.new(0.12),{Position=st.on and UDim2.fromOffset(23,3) or UDim2.fromOffset(3,3)}):Play()
+            st.on = not st.on
+            TweenService:Create(track, TweenInfo.new(0.12), {BackgroundColor3 = st.on and C.primary or C.surface}):Play()
+            TweenService:Create(thumb, TweenInfo.new(0.12), {Position = st.on and UDim2.fromOffset(23,3) or UDim2.fromOffset(3,3)}):Play()
+
             pcall(function()
-                local head=Player.Character and Player.Character:FindFirstChild("Head")
-                if head then
+                local bg = findNametagGui()
+                if not bg then
+                    -- Pas de nametag trouvé, fallback BillboardGui sur Head
+                    local head = Player.Character and Player.Character:FindFirstChild("Head")
+                    if not head then return end
                     if st.on then
-                        local bg=head:FindFirstChild("ShadowBadgeGui") or Instance.new("BillboardGui",head)
-                        bg.Name="ShadowBadgeGui"; bg.Size=UDim2.fromOffset(200,30)
-                        bg.StudsOffset=Vector3.new(0,2.5,0); bg.AlwaysOnTop=false
-                        local bi=bg:FindFirstChild("Badge_"..badge.name) or Instance.new("ImageLabel",bg)
-                        bi.Name="Badge_"..badge.name; bi.Size=UDim2.fromOffset(22,22)
-                        bi.AnchorPoint=Vector2.new(0.5,0.5); bi.Position=UDim2.new(0.5,0,0.5,0)
-                        bi.BackgroundTransparency=1; bi.Image=badge.icon; bi.ScaleType=Enum.ScaleType.Fit
+                        local fallback = head:FindFirstChild("ShadowBadgeGui") or Instance.new("BillboardGui", head)
+                        fallback.Name = "ShadowBadgeGui"
+                        fallback.Size = UDim2.fromOffset(40,22)
+                        fallback.StudsOffset = Vector3.new(0, 2.2, 0)
+                        fallback.AlwaysOnTop = false
+                        local bi = fallback:FindFirstChild("ShadowVerified") or Instance.new("ImageLabel", fallback)
+                        bi.Name = "ShadowVerified"
+                        bi.Size = UDim2.fromOffset(18,18)
+                        bi.AnchorPoint = Vector2.new(0.5,0.5)
+                        bi.Position = UDim2.new(0.5,0,0.5,0)
+                        bi.BackgroundTransparency = 1
+                        bi.Image = badge.icon
+                        bi.ScaleType = Enum.ScaleType.Fit
                     else
-                        local bg=head:FindFirstChild("ShadowBadgeGui")
-                        if bg then local bi=bg:FindFirstChild("Badge_"..badge.name); if bi then bi:Destroy() end end
+                        local head2 = Player.Character and Player.Character:FindFirstChild("Head")
+                        if head2 then
+                            local fb = head2:FindFirstChild("ShadowBadgeGui")
+                            if fb then fb:Destroy() end
+                        end
+                    end
+                    return
+                end
+
+                -- Nametag trouvé : on injecte à côté du pseudo
+                local nameLbl = findNameLabel(bg)
+
+                if st.on then
+                    -- Supprime l'ancien si présent
+                    local old = bg:FindFirstChild("ShadowVerifiedBadge")
+                    if old then old:Destroy() end
+
+                    -- Agrandit légèrement le BillboardGui pour avoir de la place
+                    bg.Size = UDim2.new(bg.Size.X.Scale, bg.Size.X.Offset + 26, bg.Size.Y.Scale, bg.Size.Y.Offset)
+
+                    local badgeImg = Instance.new("ImageLabel", bg)
+                    badgeImg.Name = "ShadowVerifiedBadge"
+                    badgeImg.Size = UDim2.fromOffset(18,18)
+                    badgeImg.BackgroundTransparency = 1
+                    badgeImg.Image = badge.icon
+                    badgeImg.ScaleType = Enum.ScaleType.Fit
+                    badgeImg.ZIndex = 10
+
+                    -- Positionne à côté du pseudo (à droite) avec un espace de 4px
+                    if nameLbl then
+                        -- Aligne verticalement avec le label pseudo
+                        badgeImg.AnchorPoint = Vector2.new(0, 0.5)
+                        local nameAbsX = nameLbl.AbsolutePosition.X - bg.AbsolutePosition.X
+                        local nameAbsW = nameLbl.AbsoluteSize.X
+                        local nameAbsY = nameLbl.AbsolutePosition.Y - bg.AbsolutePosition.Y + nameLbl.AbsoluteSize.Y / 2
+                        badgeImg.Position = UDim2.new(
+                            0, nameAbsX + nameAbsW + 4,
+                            0, nameAbsY - 9  -- centré verticalement sur le texte
+                        )
+
+                        -- Cherche aussi l'icône de plateforme Rivals (si elle existe)
+                        -- et la décale vers la droite pour laisser la place au verified
+                        for _, desc in ipairs(bg:GetDescendants()) do
+                            if desc:IsA("ImageLabel") and desc.Name ~= "ShadowVerifiedBadge" then
+                                -- Décale vers la droite
+                                desc.Position = UDim2.new(
+                                    desc.Position.X.Scale,
+                                    desc.Position.X.Offset + 22,
+                                    desc.Position.Y.Scale,
+                                    desc.Position.Y.Offset
+                                )
+                            end
+                        end
+                    else
+                        -- Pas de TextLabel trouvé, place au centre-gauche
+                        badgeImg.AnchorPoint = Vector2.new(0, 0.5)
+                        badgeImg.Position = UDim2.new(0, 4, 0.5, 0)
+                    end
+
+                else
+                    -- Unapply : supprime le badge et restore la taille
+                    local badgeImg = bg:FindFirstChild("ShadowVerifiedBadge")
+                    if badgeImg then
+                        -- Restore les icônes de plateforme décalées
+                        for _, desc in ipairs(bg:GetDescendants()) do
+                            if desc:IsA("ImageLabel") and desc.Name ~= "ShadowVerifiedBadge" then
+                                desc.Position = UDim2.new(
+                                    desc.Position.X.Scale,
+                                    desc.Position.X.Offset - 22,
+                                    desc.Position.Y.Scale,
+                                    desc.Position.Y.Offset
+                                )
+                            end
+                        end
+                        bg.Size = UDim2.new(bg.Size.X.Scale, bg.Size.X.Offset - 26, bg.Size.Y.Scale, bg.Size.Y.Offset)
+                        badgeImg:Destroy()
                     end
                 end
             end)
+
             if getgenv().ShadowNotif then
                 getgenv().ShadowNotif(badge.name, st.on and "Activé ✓" or "Désactivé", st.on and C.primary or Color3.fromRGB(130,125,155))
             end
         end)
     end
-    for _,badge in ipairs(BADGES) do buildBadge(badge) end
+
+    for _, badge in ipairs(BADGES) do buildBadge(badge) end
 end
  
 -- SKIN
@@ -2782,47 +2911,125 @@ do
     local _, inputMW   = gInput("Most Wins",     "Ex: 99999")
     local _, inputHL   = gInput("Highest Level", "Ex: 999")
     local origLB = {}
+
+    -- Trouve le container du leaderboard Rivals
+    local function getLBContainer()
+        local pg = Player.PlayerGui
+        -- Path direct depuis les PATH fournis
+        local lb = pg:FindFirstChild("LeaderboardGui")
+        if lb then
+            local list = lb:FindFirstChild("List")
+            if list then
+                return list:FindFirstChild("Container")
+            end
+        end
+        -- Fallback : cherche dans les enfants indexés
+        for _, child in ipairs(pg:GetChildren()) do
+            if child.Name == "LeaderboardGui" then
+                local list = child:FindFirstChild("List")
+                if list then return list:FindFirstChild("Container") end
+            end
+        end
+        return nil
+    end
+
     gRow(
         function()
-            local KW={
-                {inp=inputHELO, keys={"highest elo","elo"}},
-                {inp=inputWS,   keys={"win streak","streak"}},
-                {inp=inputME,   keys={"most elim","elim","kill"}},
-                {inp=inputMW,   keys={"most win","wins"}},
-                {inp=inputHL,   keys={"highest level","level","lvl"}},
-            }
+            -- 1) Modification visuelle des TextLabels dans le leaderboard
             pcall(function()
-                for _,d in ipairs(Player.PlayerGui:GetDescendants()) do
-                    if d:IsA("TextLabel") and d.Text~="" then
-                        for _,kw in ipairs(KW) do
-                            if kw.inp.Text~="" then
-                                local t=d.Text:lower()
-                                for _,k in ipairs(kw.keys) do
-                                    if t:find(k) then
-                                        table.insert(origLB,{obj=d,text=d.Text})
-                                        d.Text=kw.inp.Text; break
+                local container = getLBContainer()
+                if container then
+                    for _, slot in ipairs(container:GetChildren()) do
+                        -- Chaque slot est un LeaderboardPlayerSlot
+                        for _, desc in ipairs(slot:GetDescendants()) do
+                            if desc:IsA("TextLabel") and desc.Text ~= "" then
+                                local t = desc.Text:lower()
+                                local function tryReplace(inp, keys)
+                                    if inp.Text == "" then return end
+                                    for _, k in ipairs(keys) do
+                                        if t:find(k, 1, true) then
+                                            table.insert(origLB, {obj=desc, text=desc.Text})
+                                            desc.Text = inp.Text
+                                            return true
+                                        end
                                     end
                                 end
+                                tryReplace(inputHELO, {"elo"})
+                                tryReplace(inputWS,   {"streak", "win streak"})
+                                tryReplace(inputME,   {"elim", "kill"})
+                                tryReplace(inputMW,   {"win"})
+                                tryReplace(inputHL,   {"level", "lvl", "lv"})
                             end
                         end
                     end
                 end
-            end)
-            pcall(function()
-                local rem=game:GetService("ReplicatedStorage"):FindFirstChild("Remotes",true)
-                if rem then
-                    local r=rem:FindFirstChild("UpdateLeaderboard",true) or rem:FindFirstChild("SetLeaderboard",true)
-                    if r then r:FireServer({HighestELO=tonumber(inputHELO.Text),WinStreak=tonumber(inputWS.Text),MostElims=tonumber(inputME.Text),MostWins=tonumber(inputMW.Text),HighestLevel=tonumber(inputHL.Text)}) end
+                -- Aussi dans tout le PlayerGui (pour les affichages hors container)
+                for _, d in ipairs(Player.PlayerGui:GetDescendants()) do
+                    if d:IsA("TextLabel") and d.Text ~= "" then
+                        local t = d.Text:lower()
+                        local function tryReplace2(inp, keys)
+                            if inp.Text == "" then return end
+                            for _, k in ipairs(keys) do
+                                if t:find(k, 1, true) then
+                                    -- Evite les doublons
+                                    local already = false
+                                    for _, e in ipairs(origLB) do
+                                        if e.obj == d then already = true; break end
+                                    end
+                                    if not already then
+                                        table.insert(origLB, {obj=d, text=d.Text})
+                                        d.Text = inp.Text
+                                    end
+                                    return true
+                                end
+                            end
+                        end
+                        tryReplace2(inputHELO, {"elo"})
+                        tryReplace2(inputWS,   {"streak"})
+                        tryReplace2(inputME,   {"elim", "kill"})
+                        tryReplace2(inputMW,   {"most win"})
+                        tryReplace2(inputHL,   {"highest level"})
+                    end
                 end
             end)
-            if getgenv().ShadowNotif then getgenv().ShadowNotif("Leaderboard","Appliqué ✓",C.primary) end
+
+            -- 2) Tente le remote server-side (peu de chance que ça marche client-side)
+            pcall(function()
+                local remotes = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+                if remotes then
+                    local misc = remotes:FindFirstChild("Misc")
+                    if misc then
+                        local r = misc:FindFirstChild("UpdateLeaderboard")
+                        if r then
+                            r:FireServer({
+                                HighestELO    = tonumber(inputHELO.Text),
+                                WinStreak     = tonumber(inputWS.Text),
+                                MostElims     = tonumber(inputME.Text),
+                                MostWins      = tonumber(inputMW.Text),
+                                HighestLevel  = tonumber(inputHL.Text),
+                            })
+                        end
+                        -- Aussi le remote RequestLeaderboards trouvé dans les paths
+                        local r2 = misc:FindFirstChild("LeaderboardRefreshed")
+                        if r2 then r2:FireServer() end
+                    end
+                end
+            end)
+
+            if getgenv().ShadowNotif then
+                getgenv().ShadowNotif("Leaderboard", "Appliqué ✓", C.primary)
+            end
         end,
         function()
             pcall(function()
-                for _,e in ipairs(origLB) do pcall(function() e.obj.Text=e.text end) end
-                origLB={}
+                for _, e in ipairs(origLB) do
+                    pcall(function() e.obj.Text = e.text end)
+                end
+                origLB = {}
             end)
-            if getgenv().ShadowNotif then getgenv().ShadowNotif("Leaderboard","Réinitialisé",Color3.fromRGB(130,125,155)) end
+            if getgenv().ShadowNotif then
+                getgenv().ShadowNotif("Leaderboard", "Réinitialisé", Color3.fromRGB(130,125,155))
+            end
         end
     )
 end
