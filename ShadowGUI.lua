@@ -2928,103 +2928,126 @@ pSec("SKIN")
 do
     local _, inputSkin = pInput("Username (@)", "Ex: Builderman")
 
-    pRow(ProfilePage,
-        function()
-            if inputSkin.Text == "" then
-                if getgenv().ShadowNotif then
-                    getgenv().ShadowNotif("Skin", "Entre un @username !", Color3.fromRGB(239,68,68))
-                end
-                return
+    local function morphToUsername(username)
+        username = username:gsub("@",""):gsub("%s","")
+        if username == "" then
+            if getgenv().ShadowNotif then
+                getgenv().ShadowNotif("Skin", "Entre un @username !", Color3.fromRGB(239,68,68))
             end
-            task.spawn(function()
-                local username = inputSkin.Text:gsub("@",""):gsub("%s","")
-
-                -- Cherche le userId
-                local ok, userId = pcall(function()
-                    return Players:GetUserIdFromNameAsync(username)
-                end)
-                if not ok or not userId then
-                    if getgenv().ShadowNotif then
-                        getgenv().ShadowNotif("Skin", "Joueur introuvable !", Color3.fromRGB(239,68,68))
-                    end
-                    return
-                end
-
-                -- Charge la description
-                local ok2, desc = pcall(function()
-                    return Players:GetHumanoidDescriptionFromUserId(userId)
-                end)
-                if not ok2 or not desc then
-                    if getgenv().ShadowNotif then
-                        getgenv().ShadowNotif("Skin", "Erreur chargement avatar !", Color3.fromRGB(239,68,68))
-                    end
-                    return
-                end
-
-                local char = Player.Character or Player.CharacterAdded:Wait()
-                local hum  = char:WaitForChild("Humanoid", 10)
-                if not hum then
-                    if getgenv().ShadowNotif then
-                        getgenv().ShadowNotif("Skin", "Humanoid introuvable !", Color3.fromRGB(239,68,68))
-                    end
-                    return
-                end
-
-                -- Nettoie les anciens
-                for _, obj in ipairs(char:GetChildren()) do
-                    if obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("ShirtGraphic")
-                    or obj:IsA("Accessory") or obj:IsA("BodyColors") then
-                        obj:Destroy()
-                    end
-                end
-                local head = char:FindFirstChild("Head")
-                if head then
-                    for _, d in ipairs(head:GetChildren()) do
-                        if d:IsA("Decal") then d:Destroy() end
-                    end
-                end
-
-                -- Applique
-                local ok3 = pcall(function()
-                    hum:ApplyDescriptionClientServer(desc)
-                end)
-
-                if ok3 then
-                    if getgenv().ShadowNotif then
-                        getgenv().ShadowNotif("Skin Spoof", "Applique : @"..username, C.primary)
-                    end
-                else
-                    if getgenv().ShadowNotif then
-                        getgenv().ShadowNotif("Skin", "Echec ApplyDescription !", Color3.fromRGB(239,68,68))
-                    end
-                end
-            end)
-        end,
-        function()
-            task.spawn(function()
-                local char = Player.Character or Player.CharacterAdded:Wait()
-                local hum  = char:WaitForChild("Humanoid", 10)
-                if not hum then return end
-
-                local ok, desc = pcall(function()
-                    return Players:GetHumanoidDescriptionFromUserId(Player.UserId)
-                end)
-                if ok and desc then
-                    for _, obj in ipairs(char:GetChildren()) do
-                        if obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("ShirtGraphic")
-                        or obj:IsA("Accessory") or obj:IsA("BodyColors") then
-                            obj:Destroy()
-                        end
-                    end
-                    pcall(function()
-                        hum:ApplyDescriptionClientServer(desc)
-                    end)
-                    if getgenv().ShadowNotif then
-                        getgenv().ShadowNotif("Skin", "Restore !", Color3.fromRGB(130,125,155))
-                    end
-                end
-            end)
+            return
         end
+
+        -- Trouve le userId (joueur connecte ou pas)
+        local foundTarget = nil
+        for _, v in ipairs(Players:GetPlayers()) do
+            if v.Name:lower() == username:lower() or v.DisplayName:lower() == username:lower() then
+                foundTarget = v
+                break
+            end
+        end
+        if not foundTarget then
+            local ok, uid = pcall(function()
+                return Players:GetUserIdFromNameAsync(username)
+            end)
+            if ok and uid then
+                foundTarget = {UserId = uid, Name = username}
+            end
+        end
+
+        if not foundTarget then
+            if getgenv().ShadowNotif then
+                getgenv().ShadowNotif("Skin", "Joueur introuvable !", Color3.fromRGB(239,68,68))
+            end
+            return
+        end
+
+        local userId = foundTarget.UserId
+
+        -- Charge la description
+        local ok2, desc = pcall(function()
+            return Players:GetHumanoidDescriptionFromUserId(userId)
+        end)
+        if not ok2 or not desc then
+            if getgenv().ShadowNotif then
+                getgenv().ShadowNotif("Skin", "Erreur chargement avatar !", Color3.fromRGB(239,68,68))
+            end
+            return
+        end
+
+        local char = Player.Character or Player.CharacterAdded:Wait()
+        local hum  = char:WaitForChild("Humanoid", 10)
+        if not hum then
+            if getgenv().ShadowNotif then
+                getgenv().ShadowNotif("Skin", "Humanoid introuvable !", Color3.fromRGB(239,68,68))
+            end
+            return
+        end
+
+        -- Nettoie exactement comme akuramaa
+        for _, obj in ipairs(char:GetChildren()) do
+            if obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("ShirtGraphic")
+            or obj:IsA("Accessory") or obj:IsA("BodyColors") then
+                obj:Destroy()
+            end
+        end
+        local head = char:FindFirstChild("Head")
+        if head then
+            for _, d in ipairs(head:GetChildren()) do
+                if d:IsA("Decal") then d:Destroy() end
+            end
+        end
+
+        -- Applique exactement comme akuramaa
+        local ok3 = pcall(function()
+            hum:ApplyDescriptionClientServer(desc)
+        end)
+
+        if ok3 then
+            if getgenv().ShadowNotif then
+                getgenv().ShadowNotif("Skin Spoof", "Applique : @"..username, C.primary)
+            end
+        else
+            if getgenv().ShadowNotif then
+                getgenv().ShadowNotif("Skin", "Echec !", Color3.fromRGB(239,68,68))
+            end
+        end
+    end
+
+    local function restoreOwnSkin()
+        local ok, desc = pcall(function()
+            return Players:GetHumanoidDescriptionFromUserId(Player.UserId)
+        end)
+        if not ok or not desc then return end
+
+        local char = Player.Character or Player.CharacterAdded:Wait()
+        local hum  = char:WaitForChild("Humanoid", 10)
+        if not hum then return end
+
+        for _, obj in ipairs(char:GetChildren()) do
+            if obj:IsA("Shirt") or obj:IsA("Pants") or obj:IsA("ShirtGraphic")
+            or obj:IsA("Accessory") or obj:IsA("BodyColors") then
+                obj:Destroy()
+            end
+        end
+        local head = char:FindFirstChild("Head")
+        if head then
+            for _, d in ipairs(head:GetChildren()) do
+                if d:IsA("Decal") then d:Destroy() end
+            end
+        end
+
+        pcall(function()
+            hum:ApplyDescriptionClientServer(desc)
+        end)
+
+        if getgenv().ShadowNotif then
+            getgenv().ShadowNotif("Skin", "Restore !", Color3.fromRGB(130,125,155))
+        end
+    end
+
+    pRow(ProfilePage,
+        function() task.spawn(function() morphToUsername(inputSkin.Text) end) end,
+        function() task.spawn(function() restoreOwnSkin() end) end
     )
 end
  
