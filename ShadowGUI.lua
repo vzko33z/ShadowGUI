@@ -3143,46 +3143,53 @@ do
     local lbPersistConn = nil
     local lbParams      = {pos=1, val="", name=""}
 
-    local function getLBContainer()
+    -- Trouve TOUS les containers leaderboard actifs
+    local function getAllContainers()
+        local containers = {}
         local pg = Player.PlayerGui
-        local lb = pg:FindFirstChild("LeaderboardGui")
-        if lb then
-            local list = lb:FindFirstChild("List")
-            if list then
-                return list:FindFirstChild("Container")
-            end
-        end
         for _, child in ipairs(pg:GetChildren()) do
             if child.Name == "LeaderboardGui" then
                 local list = child:FindFirstChild("List")
                 if list then
-                    return list:FindFirstChild("Container")
+                    local cont = list:FindFirstChild("Container")
+                    if cont then
+                        table.insert(containers, cont)
+                    end
                 end
             end
         end
-        return nil
+        return containers
     end
 
-    local function applyLB()
-        local container = getLBContainer()
-        if not container then return end
+    -- Detecte le type d'un TextLabel dans un slot
+    -- Retourne "rank", "score", "displayname", "username", "other"
+    local function detectType(text)
+        if not text or text == "" then return "other" end
+        local clean = text:gsub(",",""):gsub(" ",""):gsub("%.","")
+        -- Rang : #1 / 1. / #12 etc
+        if text:match("^#?%d+%.?$") then return "rank" end
+        -- Score : nombre pur (peut avoir virgules/espaces)
+        if tonumber(clean) ~= nil then return "score" end
+        -- Username : commence par @
+        if text:match("^@") then return "username" end
+        -- DisplayName : texte alphanum
+        if text:match("^[%w%s_%-%.]+$") and #text >= 2 then return "displayname" end
+        return "other"
+    end
 
+    local function applyLBToContainer(container)
         local targetPos  = lbParams.pos
         local targetVal  = lbParams.val
-        local targetName = ""
-        if lbParams.name ~= "" then
-            targetName = lbParams.name
-        else
-            targetName = Player.DisplayName
-        end
+        local myDisplay  = lbParams.name ~= "" and lbParams.name or Player.DisplayName
+        local myUsername = "@" .. (lbParams.name ~= "" and lbParams.name or Player.Name)
 
+        -- Trie les slots par position Y
         local slots = {}
         for _, child in ipairs(container:GetChildren()) do
-            if child:IsA("Frame") or child:IsA("TextLabel") then
+            if child:IsA("Frame") and child.Visible then
                 table.insert(slots, child)
             end
         end
-
         table.sort(slots, function(a, b)
             return a.AbsolutePosition.Y < b.AbsolutePosition.Y
         end)
@@ -3192,25 +3199,64 @@ do
 
         for _, desc in ipairs(slot:GetDescendants()) do
             if desc:IsA("TextLabel") and desc.Text ~= "" then
-                local raw = desc.Text
-                local cleaned = raw:gsub(",",""):gsub(" ","")
-                local asNum = tonumber(cleaned)
-
-                -- Numero de rang : "1" "#1" "1." "#2." etc
-                if raw:match("^#?%d+%.?$") then
+                local t = detectType(desc.Text)
+                if t == "rank" then
                     desc.Text = "#" .. tostring(targetPos)
-
-                -- Nombre pur = ELO ou score
-                elseif asNum ~= nil and #cleaned >= 1 and targetVal ~= "" then
-                    desc.Text = targetVal
-
-                -- Texte = pseudo ou username
-                elseif raw:match("^@?[%w_%-]+$") and #raw >= 2 then
-                    desc.Text = targetName
-
+                elseif t == "score" and targetVal ~= "" then
+                    -- Formate le score avec virgules si c'est un nombre
+                    local num = tonumber(targetVal)
+                    if num then
+                        -- Format avec virgules : 99999 -> 99,999
+                        local s = tostring(math.floor(num))
+                        local result = ""
+                        local count = 0
+                        for i = #s, 1, -1 do
+                            count = count + 1
+                            result = s:sub(i,i) .. result
+                            if count % 3 == 0 and i > 1 then
+                                result = "," .. result
+                            end
+                        end
+                        desc.Text = result
+                    else
+                        desc.Text = targetVal
+                    end
+                elseif t == "displayname" then
+                    desc.Text = myDisplay
+                elseif t == "username" then
+                    desc.Text = myUsername
                 end
             end
         end
+    end
+
+    local function applyLB()
+        local containers = getAllContainers()
+        for _, cont in ipairs(containers) do
+            pcall(applyLBToContainer, cont)
+        end
+    end
+
+    local function refreshRealLeaderboard()
+        -- Fire le remote RequestLeaderboards pour recharger le vrai LB
+        pcall(function()
+            local remote = game:GetService("ReplicatedStorage")
+                :FindFirstChild("Remotes")
+                and game:GetService("ReplicatedStorage").Remotes
+                :FindFirstChild("Misc")
+                and game:GetService("ReplicatedStorage").Remotes.Misc
+                :FindFirstChild("RequestLeaderboards")
+            if remote then
+                remote:FireServer()
+            end
+        end)
+        -- Aussi essaie LeaderboardRefreshed
+        pcall(function()
+            local remote = game:GetService("ReplicatedStorage").Remotes.Misc.LeaderboardRefreshed
+            if remote then
+                remote:FireServer()
+            end
+        end)
     end
 
     local function startPersist()
@@ -3234,6 +3280,8 @@ do
             lbPersistConn:Disconnect()
             lbPersistConn = nil
         end
+        -- Refresh le vrai leaderboard
+        refreshRealLeaderboard()
     end
 
     gRow(
@@ -3257,17 +3305,12 @@ do
             lbActive = true
             startPersist()
 
-            local displayName = ""
-            if lbParams.name ~= "" then
-                displayName = lbParams.name
-            else
-                displayName = Player.DisplayName
-            end
+            local displayName = lbParams.name ~= "" and lbParams.name or Player.DisplayName
 
             if getgenv().ShadowNotif then
                 getgenv().ShadowNotif(
                     "Leaderboard",
-                    "#" .. tostring(lbParams.pos) .. " " .. displayName .. " " .. lbParams.val,
+                    "#" .. tostring(lbParams.pos) .. " " .. displayName .. " — " .. lbParams.val,
                     C.primary
                 )
             end
