@@ -2926,22 +2926,21 @@ end
 -- SKIN
 pSec("SKIN")
 do
-    local _, inputSkin = pInput("Username (@)", "Ex: Builderman")
+    local _, inputSkin = pInput("Username (@)", "Ex: vzko")
 
-    local origData   = {}
+    local origData  = {}
     local skinActive = false
 
     local function getChar()
         return workspace:FindFirstChild(Player.Name) or Player.Character
     end
 
-    -- Sauvegarde toutes les données visuelles du perso actuel
     local function saveOrig(char)
-        origData = { meshParts = {}, accs = {}, bodyColors = nil }
+        origData = { parts = {}, accs = {}, shirts = {}, bc = nil }
 
         local bc = char:FindFirstChildOfClass("BodyColors")
         if bc then
-            origData.bodyColors = {
+            origData.bc = {
                 HeadColor3     = bc.HeadColor3,
                 TorsoColor3    = bc.TorsoColor3,
                 LeftArmColor3  = bc.LeftArmColor3,
@@ -2951,212 +2950,118 @@ do
             }
         end
 
-        for _, part in ipairs(char:GetDescendants()) do
-            if part:IsA("MeshPart") then
-                origData.meshParts[part.Name] = {
-                    TextureID = part.TextureID,
-                    Color     = part.Color,
-                }
+        for _, p in ipairs(char:GetDescendants()) do
+            if p:IsA("MeshPart") then
+                origData.parts[p.Name] = { TextureID = p.TextureID, Color = p.Color }
+            end
+            if p:IsA("SpecialMesh") then
+                origData.parts["__smesh_"..p.Parent.Name] = { TextureId = p.TextureId, MeshId = p.MeshId }
             end
         end
 
-        -- Sauvegarde des accessoires existants (pour restore)
         for _, child in ipairs(char:GetChildren()) do
             if child:IsA("Accessory") then
                 table.insert(origData.accs, child:Clone())
             end
+            if child:IsA("Shirt") or child:IsA("Pants") or child:IsA("ShirtGraphic") then
+                table.insert(origData.shirts, child:Clone())
+            end
         end
     end
 
-    -- Clone le skin depuis un autre joueur dans workspace
-    local function cloneSkinFromTarget(char, targetName)
-        local targetModel = workspace:FindFirstChild(targetName)
-        if not targetModel then return false, "Joueur pas dans le lobby/workspace" end
-
+    local function applySkinFromModel(char, srcModel)
         -- BodyColors
-        local targetBC = targetModel:FindFirstChildOfClass("BodyColors")
-        local myBC     = char:FindFirstChildOfClass("BodyColors")
-        if targetBC and myBC then
-            myBC.HeadColor3     = targetBC.HeadColor3
-            myBC.TorsoColor3    = targetBC.TorsoColor3
-            myBC.LeftArmColor3  = targetBC.LeftArmColor3
-            myBC.RightArmColor3 = targetBC.RightArmColor3
-            myBC.LeftLegColor3  = targetBC.LeftLegColor3
-            myBC.RightLegColor3 = targetBC.RightLegColor3
+        local srcBC = srcModel:FindFirstChildOfClass("BodyColors")
+        local myBC  = char:FindFirstChildOfClass("BodyColors")
+        if srcBC and myBC then
+            myBC.HeadColor3     = srcBC.HeadColor3
+            myBC.TorsoColor3    = srcBC.TorsoColor3
+            myBC.LeftArmColor3  = srcBC.LeftArmColor3
+            myBC.RightArmColor3 = srcBC.RightArmColor3
+            myBC.LeftLegColor3  = srcBC.LeftLegColor3
+            myBC.RightLegColor3 = srcBC.RightLegColor3
         end
 
-        -- MeshParts (body textures)
-        local partNames = {
-            "Head","UpperTorso","LowerTorso",
-            "LeftUpperArm","LeftLowerArm","LeftHand",
-            "RightUpperArm","RightLowerArm","RightHand",
-            "LeftUpperLeg","LeftLowerLeg","LeftFoot",
-            "RightUpperLeg","RightLowerLeg","RightFoot",
-        }
-        for _, name in ipairs(partNames) do
-            local myPart     = char:FindFirstChild(name)
-            local targetPart = targetModel:FindFirstChild(name)
-            if myPart and targetPart and myPart:IsA("MeshPart") then
-                pcall(function()
-                    myPart.TextureID = targetPart.TextureID
-                    myPart.Color     = targetPart.Color
-                end)
-                -- Face (SpecialMesh dans Head)
-                if name == "Head" then
-                    local myMesh     = myPart:FindFirstChildOfClass("SpecialMesh")
-                    local targetMesh = targetPart:FindFirstChildOfClass("SpecialMesh")
-                    if myMesh and targetMesh then
-                        pcall(function()
-                            myMesh.TextureId = targetMesh.TextureId
-                            myMesh.MeshId    = targetMesh.MeshId
-                        end)
-                    end
-                end
-            end
-        end
-
-        -- Accessoires : supprimer les miens, cloner ceux de la cible
-        for _, child in ipairs(char:GetChildren()) do
-            if child:IsA("Accessory") then
-                pcall(function() child:Destroy() end)
-            end
-        end
-        for _, child in ipairs(targetModel:GetChildren()) do
-            if child:IsA("Accessory") then
-                pcall(function()
-                    local clone = child:Clone()
-                    clone.Parent = char
-                end)
-            end
-        end
-
-        -- Shirt / Pants / ShirtGraphic
-        for _, class in ipairs({"Shirt","Pants","ShirtGraphic"}) do
-            local myClothing     = char:FindFirstChildOfClass(class)
-            local targetClothing = targetModel:FindFirstChildOfClass(class)
-            if targetClothing then
-                if not myClothing then
-                    myClothing = Instance.new(class, char)
-                end
-                pcall(function()
-                    if class == "Shirt" then
-                        myClothing.ShirtTemplate = targetClothing.ShirtTemplate
-                    elseif class == "Pants" then
-                        myClothing.PantsTemplate = targetClothing.PantsTemplate
-                    elseif class == "ShirtGraphic" then
-                        myClothing.Graphic = targetClothing.Graphic
-                    end
-                end)
-            elseif myClothing then
-                pcall(function() myClothing:Destroy() end)
-            end
-        end
-
-        return true, nil
-    end
-
-    -- Si le joueur n'est pas dans workspace, fallback via HumanoidDescription
-    local function cloneSkinFromDesc(char, username)
-        local uid  = Players:GetUserIdFromNameAsync(username)
-        local desc = Players:GetHumanoidDescriptionFromUserId(uid)
-
-        -- BodyColors
-        local bc = char:FindFirstChildOfClass("BodyColors")
-        if bc then
-            bc.HeadColor3     = desc.HeadColor
-            bc.TorsoColor3    = desc.TorsoColor
-            bc.LeftArmColor3  = desc.LeftArmColor
-            bc.RightArmColor3 = desc.RightArmColor
-            bc.LeftLegColor3  = desc.LeftLegColor
-            bc.RightLegColor3 = desc.RightLegColor
-        end
-
-        -- MeshPart textures via desc (vrais noms proprietes HumanoidDescription)
-        local descPropMap = {
-            Head          = "Head",
-            UpperTorso    = "Torso",
-            LowerTorso    = "Torso",
-            LeftUpperArm  = "LeftArm",
-            LeftLowerArm  = "LeftArm",
-            LeftHand      = "LeftArm",
-            RightUpperArm = "RightArm",
-            RightLowerArm = "RightArm",
-            RightHand     = "RightArm",
-            LeftUpperLeg  = "LeftLeg",
-            LeftLowerLeg  = "LeftLeg",
-            LeftFoot      = "LeftLeg",
-            RightUpperLeg = "RightLeg",
-            RightLowerLeg = "RightLeg",
-            RightFoot     = "RightLeg",
-        }
-        for partName, descProp in pairs(descPropMap) do
-            local part = char:FindFirstChild(partName)
-            if part and part:IsA("MeshPart") then
-                local assetId = desc[descProp]
-                if assetId and assetId ~= 0 then
+        -- Tous les MeshParts par nom
+        for _, srcPart in ipairs(srcModel:GetDescendants()) do
+            if srcPart:IsA("MeshPart") then
+                local myPart = char:FindFirstChild(srcPart.Name, true)
+                if myPart and myPart:IsA("MeshPart") then
                     pcall(function()
-                        part.TextureID = "rbxassetid://" .. assetId
+                        myPart.TextureID = srcPart.TextureID
+                        myPart.Color     = srcPart.Color
                     end)
                 end
+                -- SpecialMesh dans ce part
+                for _, sm in ipairs(srcPart:GetChildren()) do
+                    if sm:IsA("SpecialMesh") then
+                        local myPart2 = char:FindFirstChild(srcPart.Name, true)
+                        if myPart2 then
+                            local mySM = myPart2:FindFirstChildOfClass("SpecialMesh")
+                            if mySM then
+                                pcall(function()
+                                    mySM.TextureId = sm.TextureId
+                                    mySM.MeshId    = sm.MeshId
+                                end)
+                            end
+                        end
+                    end
+                end
             end
         end
 
-        -- Face
-        local head = char:FindFirstChild("Head")
-        if head then
-            local mesh = head:FindFirstChildOfClass("SpecialMesh")
-            if mesh and desc.Face ~= 0 then
-                pcall(function()
-                    mesh.TextureId = "rbxassetid://" .. desc.Face
-                end)
-            end
-        end
-
-        -- Accessoires depuis desc (liste d'IDs)
+        -- Supprimer mes accessoires
         for _, child in ipairs(char:GetChildren()) do
-            if child:IsA("Accessory") then
+            if child:IsA("Accessory") or child:IsA("Shirt") or child:IsA("Pants") or child:IsA("ShirtGraphic") then
                 pcall(function() child:Destroy() end)
             end
         end
 
-        -- Shirt/Pants
-        if desc.Shirt ~= 0 then
-            local shirt = char:FindFirstChildOfClass("Shirt") or Instance.new("Shirt", char)
-            pcall(function() shirt.ShirtTemplate = "rbxassetid://" .. desc.Shirt end)
-        end
-        if desc.Pants ~= 0 then
-            local pants = char:FindFirstChildOfClass("Pants") or Instance.new("Pants", char)
-            pcall(function() pants.PantsTemplate = "rbxassetid://" .. desc.Pants end)
+        -- Cloner accessoires + vetements de la source
+        for _, child in ipairs(srcModel:GetChildren()) do
+            if child:IsA("Accessory") or child:IsA("Shirt") or child:IsA("Pants") or child:IsA("ShirtGraphic") then
+                pcall(function()
+                    child:Clone().Parent = char
+                end)
+            end
         end
     end
 
     local function restoreOrig(char)
-        -- BodyColors
         local bc = char:FindFirstChildOfClass("BodyColors")
-        if bc and origData.bodyColors then
-            for k, v in pairs(origData.bodyColors) do bc[k] = v end
+        if bc and origData.bc then
+            for k, v in pairs(origData.bc) do bc[k] = v end
         end
-        -- MeshParts
-        for partName, data in pairs(origData.meshParts or {}) do
-            local part = char:FindFirstChild(partName)
-            if part and part:IsA("MeshPart") then
-                pcall(function()
-                    part.TextureID = data.TextureID
-                    part.Color     = data.Color
-                end)
+        for _, p in ipairs(char:GetDescendants()) do
+            if p:IsA("MeshPart") then
+                local saved = origData.parts[p.Name]
+                if saved then
+                    pcall(function()
+                        p.TextureID = saved.TextureID
+                        p.Color     = saved.Color
+                    end)
+                end
+            end
+            if p:IsA("SpecialMesh") then
+                local saved = origData.parts["__smesh_"..p.Parent.Name]
+                if saved then
+                    pcall(function()
+                        p.TextureId = saved.TextureId
+                        p.MeshId    = saved.MeshId
+                    end)
+                end
             end
         end
-        -- Accessoires : detruire les spoofes, remettre les originaux
         for _, child in ipairs(char:GetChildren()) do
-            if child:IsA("Accessory") then
+            if child:IsA("Accessory") or child:IsA("Shirt") or child:IsA("Pants") or child:IsA("ShirtGraphic") then
                 pcall(function() child:Destroy() end)
             end
         end
-        for _, acc in ipairs(origData.accs or {}) do
-            pcall(function()
-                local clone = acc:Clone()
-                clone.Parent = char
-            end)
+        for _, saved in ipairs(origData.accs or {}) do
+            pcall(function() saved:Clone().Parent = char end)
+        end
+        for _, saved in ipairs(origData.shirts or {}) do
+            pcall(function() saved:Clone().Parent = char end)
         end
     end
 
@@ -3173,21 +3078,33 @@ do
                     local username = inputSkin.Text:gsub("@",""):gsub("%s","")
                     local char = getChar()
                     if not char then error("Perso introuvable") end
-                    saveOrig(char)
 
-                    -- Methode 1 : joueur present dans workspace
-                    local inWorkspace, wsErr = cloneSkinFromTarget(char, username)
-                    if not inWorkspace then
-                        -- Methode 2 : fallback HumanoidDescription
-                        cloneSkinFromDesc(char, username)
+                    -- Cherche dans workspace direct
+                    local srcModel = workspace:FindFirstChild(username)
+
+                    -- Sinon cherche dans getnilinstances
+                    if not srcModel then
+                        for _, v in next, getnilinstances() do
+                            if v.ClassName == "Model" and v.Name == username then
+                                srcModel = v
+                                break
+                            end
+                        end
                     end
+
+                    if not srcModel then
+                        error("Joueur '"..username.."' introuvable dans workspace ni nil instances. Il doit etre dans le meme serveur.")
+                    end
+
+                    saveOrig(char)
+                    applySkinFromModel(char, srcModel)
                     skinActive = true
                 end)
                 if getgenv().ShadowNotif then
                     if ok then
                         getgenv().ShadowNotif("Skin Spoof", "Applique!", C.primary)
                     else
-                        getgenv().ShadowNotif("Skin", "Erreur: " .. tostring(err), Color3.fromRGB(239,68,68))
+                        getgenv().ShadowNotif("Skin", tostring(err), Color3.fromRGB(239,68,68))
                     end
                 end
             end)
