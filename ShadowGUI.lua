@@ -3082,64 +3082,73 @@ end
  
 gSec("LEADERBOARD RIVALS")
 do
-    local _, inputPos   = gInput("Position dans le classement (1-100)", "Ex: 1")
-    local _, inputVal   = gInput("Valeur ELO / Score à afficher",       "Ex: 99999")
-    local _, inputName  = gInput("Pseudo affiché (vide = le tien)",     "Ex: SmurfPeak")
+    local _, inputPos  = gInput("Position dans le classement (1-100)", "Ex: 1")
+    local _, inputVal  = gInput("Valeur ELO / Score a afficher",       "Ex: 99999")
+    local _, inputName = gInput("Pseudo affiche (vide = le tien)",     "Ex: SmurfPeak")
 
-    -- Info
     do
         local ic = Instance.new("Frame", GameSpoofPage)
-        ic.Size = UDim2.new(1,0,0,34); ic.BackgroundColor3 = Color3.fromRGB(20,20,28)
-        ic.BorderSizePixel = 0; ic.LayoutOrder = GP()
+        ic.Size = UDim2.new(1,0,0,34)
+        ic.BackgroundColor3 = Color3.fromRGB(20,20,28)
+        ic.BorderSizePixel = 0
+        ic.LayoutOrder = GP()
         Instance.new("UICorner", ic).CornerRadius = UDim.new(0,7)
         Instance.new("UIStroke", ic).Color = C.border
         local il = Instance.new("TextLabel", ic)
-        il.Size = UDim2.new(1,-16,1,0); il.Position = UDim2.fromOffset(8,0)
-        il.BackgroundTransparency = 1; il.FontFace = SILK; il.TextSize = 9
+        il.Size = UDim2.new(1,-16,1,0)
+        il.Position = UDim2.fromOffset(8,0)
+        il.BackgroundTransparency = 1
+        il.FontFace = SILK
+        il.TextSize = 9
         il.TextColor3 = Color3.fromRGB(167,139,250)
         il.TextXAlignment = Enum.TextXAlignment.Left
-        il.Text = "ℹ  Ouvre le Leaderboard Rivals avant d'appliquer"
+        il.Text = "Ouvre le Leaderboard Rivals avant d'appliquer"
     end
 
-    -- État persistant
-    local lbActive     = false
+    local lbActive      = false
     local lbPersistConn = nil
-    local lbParams     = {pos = 1, val = "", name = ""}
+    local lbParams      = {pos=1, val="", name=""}
 
     local function getLBContainer()
         local pg = Player.PlayerGui
-        -- Cherche LeaderboardGui
         local lb = pg:FindFirstChild("LeaderboardGui")
         if lb then
             local list = lb:FindFirstChild("List")
-            if list then return list:FindFirstChild("Container") end
+            if list then
+                return list:FindFirstChild("Container")
+            end
         end
         for _, child in ipairs(pg:GetChildren()) do
             if child.Name == "LeaderboardGui" then
                 local list = child:FindFirstChild("List")
-                if list then return list:FindFirstChild("Container") end
+                if list then
+                    return list:FindFirstChild("Container")
+                end
             end
         end
         return nil
     end
 
-    -- Applique les modifications sur le container actuel
     local function applyLB()
         local container = getLBContainer()
         if not container then return end
 
         local targetPos  = lbParams.pos
         local targetVal  = lbParams.val
-        -- Si pseudo vide, utilise le pseudo du joueur qui run le script
-        local targetName = (lbParams.name ~= "") and lbParams.name or Player.DisplayName
+        local targetName = ""
+        if lbParams.name ~= "" then
+            targetName = lbParams.name
+        else
+            targetName = Player.DisplayName
+        end
 
-        -- Récupère les slots triés par position Y
         local slots = {}
         for _, child in ipairs(container:GetChildren()) do
             if child:IsA("Frame") or child:IsA("TextLabel") then
                 table.insert(slots, child)
             end
         end
+
         table.sort(slots, function(a, b)
             return a.AbsolutePosition.Y < b.AbsolutePosition.Y
         end)
@@ -3147,45 +3156,39 @@ do
         local slot = slots[targetPos]
         if not slot then return end
 
-        -- Modifie les TextLabels du slot
         for _, desc in ipairs(slot:GetDescendants()) do
             if desc:IsA("TextLabel") and desc.Text ~= "" then
                 local raw = desc.Text
+                local cleaned = raw:gsub(",",""):gsub(" ","")
+                local asNum = tonumber(cleaned)
 
-                -- Détecte si c'est un numéro de rang (ex: "1", "#1", "1.")
+                -- Numero de rang : "1" "#1" "1." "#2." etc
                 if raw:match("^#?%d+%.?$") then
-                    desc.Text = "#"..targetPos
-                    goto nextDesc
-                end
+                    desc.Text = "#" .. tostring(targetPos)
 
-                -- Détecte si c'est un nombre pur (ELO, score)
-                -- On exclut les nombres courts qui sont probablement des rangs
-                local asNum = tonumber(raw:gsub(",",""):gsub(" ",""))
-                if asNum ~= nil and #raw >= 2 then
-                    if targetVal ~= "" then
-                        desc.Text = targetVal
-                    end
-                    goto nextDesc
-                end
+                -- Nombre pur = ELO ou score
+                elseif asNum ~= nil and #cleaned >= 1 and targetVal ~= "" then
+                    desc.Text = targetVal
 
-                -- Sinon c'est un texte (pseudo, username)
-                -- On remplace si c'est pas un chiffre
-                if raw:match("^@?[%w_]+$") or raw:find("@") then
+                -- Texte = pseudo ou username
+                elseif raw:match("^@?[%w_%-]+$") and #raw >= 2 then
                     desc.Text = targetName
-                end
 
-                ::nextDesc::
+                end
             end
         end
     end
 
-    -- Démarre la persistance
     local function startPersist()
-        if lbPersistConn then lbPersistConn:Disconnect() end
-        -- Ré-applique à chaque fois que le container change (Rivals refresh)
+        if lbPersistConn then
+            lbPersistConn:Disconnect()
+            lbPersistConn = nil
+        end
         lbPersistConn = RunService.Heartbeat:Connect(function()
             if not lbActive then
-                lbPersistConn:Disconnect(); lbPersistConn = nil; return
+                lbPersistConn:Disconnect()
+                lbPersistConn = nil
+                return
             end
             pcall(applyLB)
         end)
@@ -3193,7 +3196,10 @@ do
 
     local function stopPersist()
         lbActive = false
-        if lbPersistConn then lbPersistConn:Disconnect(); lbPersistConn = nil end
+        if lbPersistConn then
+            lbPersistConn:Disconnect()
+            lbPersistConn = nil
+        end
     end
 
     gRow(
@@ -3201,23 +3207,33 @@ do
             local pos = tonumber(inputPos.Text)
             if not pos then
                 if getgenv().ShadowNotif then
-                    getgenv().ShadowNotif("Leaderboard", "Indique une position (1-100) !", Color3.fromRGB(239,68,68))
+                    getgenv().ShadowNotif(
+                        "Leaderboard",
+                        "Indique une position entre 1 et 100",
+                        Color3.fromRGB(239,68,68)
+                    )
                 end
                 return
             end
 
             lbParams.pos  = math.clamp(math.floor(pos), 1, 100)
             lbParams.val  = inputVal.Text
-            lbParams.name = inputName.Text  -- vide = utilise Player.DisplayName dans applyLB
+            lbParams.name = inputName.Text
 
             lbActive = true
             startPersist()
 
+            local displayName = ""
+            if lbParams.name ~= "" then
+                displayName = lbParams.name
+            else
+                displayName = Player.DisplayName
+            end
+
             if getgenv().ShadowNotif then
-                local displayName = (lbParams.name ~= "") and lbParams.name or Player.DisplayName
                 getgenv().ShadowNotif(
                     "Leaderboard",
-                    "#"..lbParams.pos.." — "..displayName.." — "..lbParams.val.." ✓",
+                    "#" .. tostring(lbParams.pos) .. " " .. displayName .. " " .. lbParams.val,
                     C.primary
                 )
             end
@@ -3225,7 +3241,11 @@ do
         function()
             stopPersist()
             if getgenv().ShadowNotif then
-                getgenv().ShadowNotif("Leaderboard", "Réinitialisé", Color3.fromRGB(130,125,155))
+                getgenv().ShadowNotif(
+                    "Leaderboard",
+                    "Reinitialise",
+                    Color3.fromRGB(130,125,155)
+                )
             end
         end
     )
