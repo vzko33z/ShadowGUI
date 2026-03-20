@@ -2624,8 +2624,6 @@ pSec("BADGES")
 do
     local VERIFIED_ICON = "rbxassetid://11478378840"
 
-    -- Trouve le BillboardGui nametag de Rivals sur le personnage local
-    -- Rivals place le nametag sur la Head avec un BillboardGui
     local function findRivalsNametag()
         local char = Player.Character
         if not char then return nil, nil end
@@ -2633,18 +2631,18 @@ do
         if not head then return nil, nil end
         for _, child in ipairs(head:GetChildren()) do
             if child:IsA("BillboardGui") and child.Name ~= "ShadowBadgeGui" then
-                -- Cherche le TextLabel contenant le pseudo
                 for _, desc in ipairs(child:GetDescendants()) do
-                    if desc:IsA("TextLabel") and
-                       (desc.Text == Player.DisplayName or desc.Text == Player.Name or
-                        desc.Text:find(Player.DisplayName, 1, true) or
-                        desc.Text:find(Player.Name, 1, true)) then
-                        return child, desc
+                    if desc:IsA("TextLabel") then
+                        if desc.Text == Player.DisplayName
+                        or desc.Text == Player.Name
+                        or desc.Text:find(Player.DisplayName, 1, true)
+                        or desc.Text:find(Player.Name, 1, true) then
+                            return child, desc
+                        end
                     end
                 end
             end
         end
-        -- Fallback : premier BillboardGui de la Head
         for _, child in ipairs(head:GetChildren()) do
             if child:IsA("BillboardGui") and child.Name ~= "ShadowBadgeGui" then
                 return child, child:FindFirstChildWhichIsA("TextLabel", true)
@@ -2656,19 +2654,15 @@ do
     local verifiedConn = nil
     local playerListConns = {}
 
-    -- Injecte dans le nametag 3D du personnage
     local function applyToNametag()
         local nametag, nameLbl = findRivalsNametag()
         if not nametag or not nameLbl then return false end
 
-        -- Supprime l'ancien
         local old = nametag:FindFirstChild("ShadowVerifiedBadge")
         if old then old:Destroy() end
 
-        -- Taille du badge
         local SZ = 16
 
-        -- Crée le badge verified SANS toucher à rien d'autre dans le nametag
         local badge = Instance.new("ImageLabel")
         badge.Name               = "ShadowVerifiedBadge"
         badge.Image              = VERIFIED_ICON
@@ -2677,14 +2671,7 @@ do
         badge.ZIndex             = nameLbl.ZIndex + 2
         badge.Size               = UDim2.fromOffset(SZ, SZ)
 
-        -- Position : même Y que le TextLabel pseudo, juste après le texte à droite
-        -- On utilise uniquement les offsets du TextLabel, pas de scale
-        local tx = nameLbl.Position.X.Offset + nameLbl.Size.X.Offset + 3
-        local ty = nameLbl.Position.Y.Offset + (nameLbl.Size.Y.Offset - SZ) / 2
-
-        -- Si le TextLabel utilise du Scale, on adapte
         if nameLbl.Position.X.Scale > 0 then
-            -- Positionne après le centre du label
             badge.AnchorPoint = Vector2.new(0, 0.5)
             badge.Position = UDim2.new(
                 nameLbl.Position.X.Scale + nameLbl.Size.X.Scale,
@@ -2693,6 +2680,8 @@ do
                 nameLbl.Position.Y.Offset
             )
         else
+            local tx = nameLbl.Position.X.Offset + nameLbl.Size.X.Offset + 3
+            local ty = nameLbl.Position.Y.Offset + (nameLbl.Size.Y.Offset - SZ) / 2
             badge.AnchorPoint = Vector2.new(0, 0)
             badge.Position    = UDim2.fromOffset(tx, ty)
         end
@@ -2701,47 +2690,43 @@ do
         return true
     end
 
-    -- Injecte dans la liste joueurs à droite (PlayerList Rivals)
-    -- On cherche les labels contenant notre pseudo dans les ScreenGui
     local function applyToPlayerList(on)
-        -- Déconnecte les anciens
-        for _, c in ipairs(playerListConns) do pcall(function() c:Disconnect() end) end
+        for _, c in ipairs(playerListConns) do
+            pcall(function() c:Disconnect() end)
+        end
         playerListConns = {}
 
         pcall(function()
             for _, gui in ipairs(Player.PlayerGui:GetChildren()) do
                 if gui:IsA("ScreenGui") then
                     for _, desc in ipairs(gui:GetDescendants()) do
-                        if desc:IsA("TextLabel") and
-                           (desc.Text == Player.DisplayName or desc.Text == Player.Name) then
-
-                            local slot = desc.Parent
-                            if not slot then goto continue end
-
-                            local oldV = slot:FindFirstChild("ShadowVerifiedPL")
-
-                            if on and not oldV then
-                                local SZ = 14
-                                local vbadge = Instance.new("ImageLabel", slot)
-                                vbadge.Name  = "ShadowVerifiedPL"
-                                vbadge.Image = VERIFIED_ICON
-                                vbadge.Size  = UDim2.fromOffset(SZ, SZ)
-                                vbadge.BackgroundTransparency = 1
-                                vbadge.ScaleType = Enum.ScaleType.Fit
-                                vbadge.ZIndex    = desc.ZIndex + 1
-                                -- À droite du label pseudo, sans toucher à quoi que ce soit d'autre
-                                vbadge.AnchorPoint = Vector2.new(0, 0.5)
-                                vbadge.Position    = UDim2.new(
-                                    desc.Position.X.Scale + desc.Size.X.Scale,
-                                    desc.Position.X.Offset + desc.AbsoluteSize.X + 4,
-                                    desc.Position.Y.Scale,
-                                    desc.Position.Y.Offset + desc.Size.Y.Offset / 2
-                                )
-                            elseif not on and oldV then
-                                oldV:Destroy()
+                        if desc:IsA("TextLabel") then
+                            if desc.Text == Player.DisplayName
+                            or desc.Text == Player.Name then
+                                local slot = desc.Parent
+                                if slot then
+                                    local oldV = slot:FindFirstChild("ShadowVerifiedPL")
+                                    if on and not oldV then
+                                        local SZ = 14
+                                        local vbadge = Instance.new("ImageLabel", slot)
+                                        vbadge.Name              = "ShadowVerifiedPL"
+                                        vbadge.Image             = VERIFIED_ICON
+                                        vbadge.Size              = UDim2.fromOffset(SZ, SZ)
+                                        vbadge.BackgroundTransparency = 1
+                                        vbadge.ScaleType         = Enum.ScaleType.Fit
+                                        vbadge.ZIndex            = desc.ZIndex + 1
+                                        vbadge.AnchorPoint       = Vector2.new(0, 0.5)
+                                        vbadge.Position          = UDim2.new(
+                                            desc.Position.X.Scale + desc.Size.X.Scale,
+                                            desc.Position.X.Offset + desc.AbsoluteSize.X + 4,
+                                            desc.Position.Y.Scale,
+                                            desc.Position.Y.Offset + desc.Size.Y.Offset / 2
+                                        )
+                                    elseif not on and oldV then
+                                        oldV:Destroy()
+                                    end
+                                end
                             end
-
-                            ::continue::
                         end
                     end
                 end
@@ -2750,83 +2735,104 @@ do
     end
 
     local function removeAll()
-        -- Nametag
         local char = Player.Character
         if char then
             for _, desc in ipairs(char:GetDescendants()) do
-                if desc.Name == "ShadowVerifiedBadge" then pcall(function() desc:Destroy() end) end
-            end
-        end
-        -- Player list
-        for _, gui in ipairs(Player.PlayerGui:GetChildren()) do
-            if gui:IsA("ScreenGui") then
-                for _, desc in ipairs(gui:GetDescendants()) do
-                    if desc.Name == "ShadowVerifiedPL" then pcall(function() desc:Destroy() end) end
+                if desc.Name == "ShadowVerifiedBadge" then
+                    pcall(function() desc:Destroy() end)
                 end
             end
         end
-        -- Déconnecte
-        for _, c in ipairs(playerListConns) do pcall(function() c:Disconnect() end) end
+        for _, gui in ipairs(Player.PlayerGui:GetChildren()) do
+            if gui:IsA("ScreenGui") then
+                for _, desc in ipairs(gui:GetDescendants()) do
+                    if desc.Name == "ShadowVerifiedPL" then
+                        pcall(function() desc:Destroy() end)
+                    end
+                end
+            end
+        end
+        for _, c in ipairs(playerListConns) do
+            pcall(function() c:Disconnect() end)
+        end
         playerListConns = {}
-        if verifiedConn then verifiedConn:Disconnect(); verifiedConn = nil end
+        if verifiedConn then
+            verifiedConn:Disconnect()
+            verifiedConn = nil
+        end
     end
 
-    -- Carte Verified Badge
     local function buildVerifiedCard()
         local card = Instance.new("Frame", ProfilePage)
-        card.Size = UDim2.new(1,0,0,38); card.BackgroundColor3 = C.card
-        card.BorderSizePixel = 0; card.LayoutOrder = PP()
+        card.Size = UDim2.new(1,0,0,38)
+        card.BackgroundColor3 = C.card
+        card.BorderSizePixel = 0
+        card.LayoutOrder = PP()
         Instance.new("UICorner", card).CornerRadius = UDim.new(0,7)
         Instance.new("UIStroke", card).Color = C.border
 
         local ico = Instance.new("ImageLabel", card)
-        ico.Size = UDim2.fromOffset(18,18); ico.Position = UDim2.new(0,10,0.5,-9)
-        ico.BackgroundTransparency = 1; ico.Image = VERIFIED_ICON; ico.ScaleType = Enum.ScaleType.Fit
+        ico.Size = UDim2.fromOffset(18,18)
+        ico.Position = UDim2.new(0,10,0.5,-9)
+        ico.BackgroundTransparency = 1
+        ico.Image = VERIFIED_ICON
+        ico.ScaleType = Enum.ScaleType.Fit
 
         local lbl = Instance.new("TextLabel", card)
-        lbl.Size = UDim2.new(1,-100,1,0); lbl.Position = UDim2.fromOffset(34,0)
-        lbl.BackgroundTransparency = 1; lbl.FontFace = SILK; lbl.TextSize = 10
-        lbl.TextColor3 = C.text; lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Size = UDim2.new(1,-100,1,0)
+        lbl.Position = UDim2.fromOffset(34,0)
+        lbl.BackgroundTransparency = 1
+        lbl.FontFace = SILK
+        lbl.TextSize = 10
+        lbl.TextColor3 = C.text
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.Text = "Verified Badge"
 
         local st = {on = false}
+
         local track = Instance.new("TextButton", card)
-        track.Size = UDim2.fromOffset(42,22); track.Position = UDim2.new(1,-54,0.5,-11)
-        track.BackgroundColor3 = C.surface; track.BorderSizePixel = 0
-        track.Text = ""; track.AutoButtonColor = false
+        track.Size = UDim2.fromOffset(42,22)
+        track.Position = UDim2.new(1,-54,0.5,-11)
+        track.BackgroundColor3 = C.surface
+        track.BorderSizePixel = 0
+        track.Text = ""
+        track.AutoButtonColor = false
         Instance.new("UICorner", track).CornerRadius = UDim.new(1,0)
         Instance.new("UIStroke", track).Color = C.border
 
         local thumb = Instance.new("Frame", track)
-        thumb.Size = UDim2.fromOffset(16,16); thumb.Position = UDim2.fromOffset(3,3)
-        thumb.BackgroundColor3 = Color3.new(1,1,1); thumb.BorderSizePixel = 0
+        thumb.Size = UDim2.fromOffset(16,16)
+        thumb.Position = UDim2.fromOffset(3,3)
+        thumb.BackgroundColor3 = Color3.new(1,1,1)
+        thumb.BorderSizePixel = 0
         Instance.new("UICorner", thumb).CornerRadius = UDim.new(1,0)
 
         track.MouseButton1Click:Connect(function()
             st.on = not st.on
-            TweenService:Create(track, TweenInfo.new(0.12), {BackgroundColor3 = st.on and C.primary or C.surface}):Play()
-            TweenService:Create(thumb, TweenInfo.new(0.12), {Position = st.on and UDim2.fromOffset(23,3) or UDim2.fromOffset(3,3)}):Play()
+            TweenService:Create(track, TweenInfo.new(0.12), {
+                BackgroundColor3 = st.on and C.primary or C.surface
+            }):Play()
+            TweenService:Create(thumb, TweenInfo.new(0.12), {
+                Position = st.on and UDim2.fromOffset(23,3) or UDim2.fromOffset(3,3)
+            }):Play()
 
             if st.on then
-                -- Applique maintenant
                 pcall(applyToNametag)
                 pcall(applyToPlayerList, true)
 
-                -- Boucle de persistance : ré-applique toutes les 2 secondes
-                -- car Rivals peut recréer les nametags
                 if verifiedConn then verifiedConn:Disconnect() end
                 verifiedConn = RunService.Heartbeat:Connect(function()
                     if not st.on then
-                        verifiedConn:Disconnect(); verifiedConn = nil; return
+                        verifiedConn:Disconnect()
+                        verifiedConn = nil
+                        return
                     end
-                    -- Vérifie si le badge existe encore dans le nametag
                     local nt, _ = findRivalsNametag()
                     if nt and not nt:FindFirstChild("ShadowVerifiedBadge") then
                         pcall(applyToNametag)
                     end
                 end)
 
-                -- Aussi ré-applique après respawn
                 Player.CharacterAdded:Connect(function()
                     if st.on then
                         task.wait(2.5)
@@ -2834,7 +2840,6 @@ do
                         pcall(applyToPlayerList, true)
                     end
                 end)
-
             else
                 removeAll()
             end
@@ -2842,47 +2847,74 @@ do
             if getgenv().ShadowNotif then
                 getgenv().ShadowNotif(
                     "Verified Badge",
-                    st.on and "Activé ✓" or "Désactivé",
+                    st.on and "Active" or "Desactive",
                     st.on and C.primary or Color3.fromRGB(130,125,155)
                 )
             end
         end)
     end
 
-    -- Carte Premium Badge
     local function buildPremiumCard()
         local PREM_ICON = "rbxassetid://4038140816"
         local card = Instance.new("Frame", ProfilePage)
-        card.Size = UDim2.new(1,0,0,38); card.BackgroundColor3 = C.card
-        card.BorderSizePixel = 0; card.LayoutOrder = PP()
+        card.Size = UDim2.new(1,0,0,38)
+        card.BackgroundColor3 = C.card
+        card.BorderSizePixel = 0
+        card.LayoutOrder = PP()
         Instance.new("UICorner", card).CornerRadius = UDim.new(0,7)
         Instance.new("UIStroke", card).Color = C.border
+
         local ico = Instance.new("ImageLabel", card)
-        ico.Size = UDim2.fromOffset(18,18); ico.Position = UDim2.new(0,10,0.5,-9)
-        ico.BackgroundTransparency = 1; ico.Image = PREM_ICON
-        ico.ImageColor3 = C.primary; ico.ScaleType = Enum.ScaleType.Fit
+        ico.Size = UDim2.fromOffset(18,18)
+        ico.Position = UDim2.new(0,10,0.5,-9)
+        ico.BackgroundTransparency = 1
+        ico.Image = PREM_ICON
+        ico.ImageColor3 = C.primary
+        ico.ScaleType = Enum.ScaleType.Fit
+
         local lbl = Instance.new("TextLabel", card)
-        lbl.Size = UDim2.new(1,-100,1,0); lbl.Position = UDim2.fromOffset(34,0)
-        lbl.BackgroundTransparency = 1; lbl.FontFace = SILK; lbl.TextSize = 10
-        lbl.TextColor3 = C.text; lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Size = UDim2.new(1,-100,1,0)
+        lbl.Position = UDim2.fromOffset(34,0)
+        lbl.BackgroundTransparency = 1
+        lbl.FontFace = SILK
+        lbl.TextSize = 10
+        lbl.TextColor3 = C.text
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
         lbl.Text = "Premium Badge"
+
         local st = {on = false}
+
         local track = Instance.new("TextButton", card)
-        track.Size = UDim2.fromOffset(42,22); track.Position = UDim2.new(1,-54,0.5,-11)
-        track.BackgroundColor3 = C.surface; track.BorderSizePixel = 0
-        track.Text = ""; track.AutoButtonColor = false
+        track.Size = UDim2.fromOffset(42,22)
+        track.Position = UDim2.new(1,-54,0.5,-11)
+        track.BackgroundColor3 = C.surface
+        track.BorderSizePixel = 0
+        track.Text = ""
+        track.AutoButtonColor = false
         Instance.new("UICorner", track).CornerRadius = UDim.new(1,0)
         Instance.new("UIStroke", track).Color = C.border
+
         local thumb = Instance.new("Frame", track)
-        thumb.Size = UDim2.fromOffset(16,16); thumb.Position = UDim2.fromOffset(3,3)
-        thumb.BackgroundColor3 = Color3.new(1,1,1); thumb.BorderSizePixel = 0
+        thumb.Size = UDim2.fromOffset(16,16)
+        thumb.Position = UDim2.fromOffset(3,3)
+        thumb.BackgroundColor3 = Color3.new(1,1,1)
+        thumb.BorderSizePixel = 0
         Instance.new("UICorner", thumb).CornerRadius = UDim.new(1,0)
+
         track.MouseButton1Click:Connect(function()
             st.on = not st.on
-            TweenService:Create(track, TweenInfo.new(0.12), {BackgroundColor3 = st.on and C.primary or C.surface}):Play()
-            TweenService:Create(thumb, TweenInfo.new(0.12), {Position = st.on and UDim2.fromOffset(23,3) or UDim2.fromOffset(3,3)}):Play()
+            TweenService:Create(track, TweenInfo.new(0.12), {
+                BackgroundColor3 = st.on and C.primary or C.surface
+            }):Play()
+            TweenService:Create(thumb, TweenInfo.new(0.12), {
+                Position = st.on and UDim2.fromOffset(23,3) or UDim2.fromOffset(3,3)
+            }):Play()
             if getgenv().ShadowNotif then
-                getgenv().ShadowNotif("Premium Badge", st.on and "Activé ✓" or "Désactivé", st.on and C.primary or Color3.fromRGB(130,125,155))
+                getgenv().ShadowNotif(
+                    "Premium Badge",
+                    st.on and "Active" or "Desactive",
+                    st.on and C.primary or Color3.fromRGB(130,125,155)
+                )
             end
         end)
     end
